@@ -19,6 +19,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from swarm.llm import LLMFactory, BaseLLM, StreamConfig # Added StreamConfig for type hints
 from .html_analyzer import HTMLAnalyzer # Import HTMLAnalyzer
+from .action_planner import ActionPlanner # New import
+from .selenium_executor import SeleniumExecutor # New import
 
 # Configuration
 # MAX_INTERACTION_RETRIES = 3 # Will be loaded from agent_config.json
@@ -100,63 +102,67 @@ class WebActions:
                 self.driver.quit()
             raise
 
-        # Determine LLM configuration name
+        # Determine LLM configuration name for the planner
         if llm_config_name:
-            chosen_llm_config_name = llm_config_name
+            chosen_llm_config_name_for_planner = llm_config_name
         elif os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG):
-            chosen_llm_config_name = os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG)
+            chosen_llm_config_name_for_planner = os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG)
         else:
-            chosen_llm_config_name = WEB_ACTIONS_SETTINGS.get("default_llm_config_name")
+            chosen_llm_config_name_for_planner = WEB_ACTIONS_SETTINGS.get("default_llm_config_name")
 
-        if not chosen_llm_config_name:
-            err_msg = "WebActions: LLM configuration name not provided. Please specify via argument, environment variable, or in agent_config.json."
+        if not chosen_llm_config_name_for_planner:
+            err_msg = "WebActions: LLM configuration name for ActionPlanner not provided. Please specify via argument, environment variable, or in agent_config.json."
             logger.critical(err_msg)
-            self.close() # Attempt to close browser if initialized
+            self.close() 
             raise ValueError(err_msg)
         
         self.max_interaction_retries = WEB_ACTIONS_SETTINGS.get("max_interaction_retries", FALLBACK_WEB_ACTIONS_MAX_RETRIES)
-
-        # New configuration parameters for DOM simplification
         self.dom_max_elements = WEB_ACTIONS_SETTINGS.get("dom_max_elements", FALLBACK_DOM_MAX_ELEMENTS)
         self.dom_text_preview_length = WEB_ACTIONS_SETTINGS.get("dom_text_preview_length", FALLBACK_DOM_TEXT_PREVIEW_LENGTH)
 
-        logger.info(f"WebActions: Attempting to use LLM configuration: {chosen_llm_config_name}, Max Retries: {self.max_interaction_retries}, DOM Max Elements: {self.dom_max_elements}, DOM Text Preview Length: {self.dom_text_preview_length}")
+        logger.info(f"WebActions: LLM for ActionPlanner: {chosen_llm_config_name_for_planner}, Max Retries: {self.max_interaction_retries}, DOM Max Elements: {self.dom_max_elements}, DOM Text Preview Length: {self.dom_text_preview_length}")
         
-        # Ensure that for action planning, streaming is disabled.
-        # We construct the override for stream_config.
         planning_llm_overrides = llm_override_kwargs.copy()
         planning_llm_overrides["stream_config"] = StreamConfig(enabled=False)
 
         try:
-            self.llm_client: BaseLLM = LLMFactory.create_from_config(
-                config_name=chosen_llm_config_name, 
-                **planning_llm_overrides # Pass merged overrides
+            # Initialize LLM client specifically for the ActionPlanner
+            planner_llm_client: BaseLLM = LLMFactory.create_from_config(
+                config_name=chosen_llm_config_name_for_planner, 
+                **planning_llm_overrides
             )
-            logger.info(f"LLM client for WebActions created successfully using config: {chosen_llm_config_name} (streaming explicitly disabled for planning)")
-        except ValueError as ve: # Raised by LLMFactory if config_name is not found
-            err_msg = f"WebActions: Failed to create LLM from specified config '{chosen_llm_config_name}': {ve}. Ensure this configuration exists in llm_config.json."
-            logger.critical(err_msg, exc_info=True)
-            self.close() # Attempt to close browser if initialized
-            raise ValueError(err_msg) from ve # Re-raise with more context
-        except Exception as e: # Catch any other unexpected errors during LLM init
-            err_msg = f"WebActions: An unexpected error occurred during LLM client initialization with config '{chosen_llm_config_name}': {e}"
+            logger.info(f"LLM client for ActionPlanner created successfully using config: {chosen_llm_config_name_for_planner} (streaming explicitly disabled for planning)")
+            self.action_planner = ActionPlanner(planner_llm_client)
+        except ValueError as ve: 
+            err_msg = f"WebActions: Failed to create LLM for ActionPlanner from config '{chosen_llm_config_name_for_planner}': {ve}."
             logger.critical(err_msg, exc_info=True)
             self.close()
-            raise Exception(err_msg) from e # Re-raise with more context
+            raise ValueError(err_msg) from ve
+        except Exception as e: 
+            err_msg = f"WebActions: Unexpected error initializing LLM/ActionPlanner with config '{chosen_llm_config_name_for_planner}': {e}"
+            logger.critical(err_msg, exc_info=True)
+            self.close()
+            raise Exception(err_msg) from e
             
         # Initialize HTMLAnalyzer
-        # HTMLAnalyzer will load its own configuration from agent_config.json
         try:
             logger.info("WebActions: Initializing internal HTMLAnalyzer...")
             self.html_analyzer = HTMLAnalyzer() 
-            # HTMLAnalyzer's __init__ prints its chosen LLM config name and effective stream settings.
             logger.info("WebActions: Internal HTMLAnalyzer initialized successfully.")
         except Exception as e_analyzer:
             logger.error(f"WebActions: Failed to initialize internal HTMLAnalyzer: {e_analyzer}", exc_info=True)
             logger.warning("WebActions: HTMLAnalyzer could not be initialized. Content analysis capabilities will be unavailable.")
-            self.html_analyzer = None # Set to None if initialization fails
+            self.html_analyzer = None
 
-        logger.info("WebActions initialized.")
+        # Initialize SeleniumExecutor
+        if self.driver:
+            self.selenium_executor = SeleniumExecutor(self.driver)
+        else:
+            # This case should ideally not be reached if driver initialization above succeeded or raised
+            logger.critical("WebActions: WebDriver not available for SeleniumExecutor initialization.")
+            raise Exception("WebActions: WebDriver not available for SeleniumExecutor initialization.")
+
+        logger.info("WebActions initialized with ActionPlanner, SeleniumExecutor, and HTMLAnalyzer.")
 
     def open_url(self, url: str):
         """Opens the specified URL in the browser."""
@@ -279,302 +285,94 @@ class WebActions:
         # logger.info(f"Simplified DOM (first 500 chars):\n{simplified_dom[:500]}")
         return simplified_dom
 
-    def plan_actions_with_llm(self, user_intention: str, dom_info: str) -> Optional[List[Dict[str, Any]]]:
-        """
-        Uses the LLM to understand user intention and plan Selenium actions.
-        """
-        prompt_parts = [
-            "You are an expert web automation assistant. Based on the provided simplified DOM and the user's intention, ",
-            "determine a sequence of actions to achieve the goal. Focus on using the 'ref' attribute of elements for interactions.",
-            "Available actions:",
-            "1. type(ref, text): Type text into an input field, textarea, or select.",
-            "   - ref: The 'ref' attribute of the element from the DOM.",
-            "   - text: The text to type.",
-            "2. click(ref): Click on a button, link, or other clickable element.",
-            "   - ref: The 'ref' attribute of the element from the DOM.",
-            "3. navigate(url): Navigate to a new URL.",
-            "   - url: The full URL to navigate to.",
-            "4. wait(seconds): Wait for a specified number of seconds (e.g., for dynamic content to load). Max 5 seconds.",
-            "   - seconds: Number of seconds to wait.",
-            "5. analyze_page_content(question_for_analyzer): Use this if the user is asking a question about the content of the current page itself (e.g., 'Summarize this page', 'What is the main topic?', 'Find information about X on this page').",
-            "   - question_for_analyzer: The specific question or analysis task based on the user's intention.",
-            "Current Page URL (for context): " + (self.driver.current_url if self.driver else "Unknown"),
-            f"Simplified DOM:\n---\n{dom_info}\n---",
-            f'User Intention: "{user_intention}"',
-            "Output the actions as a JSON list of dictionaries. Each dictionary must have an \"action_type\" ",
-            "(e.g., \"type\", \"click\", \"navigate\", \"wait\", \"analyze_page_content\"), and other necessary parameters based on the action_type ",
-            "(e.g., \"ref\", \"text\", \"url\", \"seconds\", \"question_for_analyzer\"). ",            
-            "Guidance for clicking links (<a> tags for navigation):",
-            "  - Pay close attention to the link's text content, its `aria-label`, and its `href` attribute as shown in the simplified DOM.",
-            "  - Prefer links where the text, `aria-label`, or `href` clearly matches the user's stated navigation goal.",
-            "  - Example: If the user says 'go to the careers page', look for a link with text like 'Careers' or an href like '/careers'.",
-            "  - If you must use an `idx#` reference for a link (e.g., `a_idx#3`), be very careful. This index is 0-based relative to the visible `<a>` tags presented in the simplified DOM.",
-            "  - Double-check that the chosen `idx#` is valid and the link is the most plausible one based on all available information (text, href, context).",
-            "Ensure the output is ONLY the JSON list, starting with [ and ending with ].",
-            "Example for typing and clicking:",
-            "```json",
-            "[",
-            "  {\"action_type\": \"type\", \"ref\": \"input_id#search_query_type#text\", \"text\": \"hello world\"},",
-            "  {\"action_type\": \"click\", \"ref\": \"button_id#search_button\"}",
-            "]",
-            "```",
-            "Example for navigation:",
-            "```json",
-            "[",
-            "  {\"action_type\": \"navigate\", \"url\": \"https://www.example.com\"}",
-            "]",
-            "```",
-            "Example for waiting:",
-            "```json",
-            "[",
-            "  {\"action_type\": \"wait\", \"seconds\": 3}",
-            "]",
-            "```",
-            "Example for page content analysis:",
-            "```json",
-            "[",
-            "  {\"action_type\": \"analyze_page_content\", \"question_for_analyzer\": \"What are the main services offered on this page?\"}",
-            "]",
-            "```",
-            "If the intention cannot be achieved with the available elements/actions, or if the DOM is empty, output an empty list [].",
-            "Only use the 'ref' attributes provided in the simplified DOM to identify elements.",
-            "If a 'ref' includes 'idx#', it means it's a less specific identifier, try to use refs with 'id#' or 'name#' if available for the same logical element.",
-            "Be very careful to output valid JSON. The response MUST be a single JSON array."
-        ]
-        prompt = "\n".join(prompt_parts)
-
-        logger.info("Sending request to LLM for action planning...")
-        # logger.debug(f"LLM Prompt for planning:\n{prompt}") # Can be very verbose
-        messages = [{"role": "user", "content": prompt}]
-        response_text, json_str = None, None
-        try:
-            if not self.llm_client:
-                logger.error("LLM client not available for planning actions.")
-                return None
-            response_text = self.llm_client.generate(messages)
-            if not response_text: logger.warning("LLM returned empty response."); return None
-            logger.info(f"LLM Raw Response for planning:\n{response_text}")
-            
-            # Extract JSON from markdown code block if present
-            if "```json" in response_text:
-                json_str = response_text.split("```json\n", 1)[1].split("\n```", 1)[0]
-            elif response_text.strip().startswith("[") and response_text.strip().endswith("]"):
-                 json_str = response_text.strip()
-            else: 
-                json_start = response_text.find('[')
-                json_end = response_text.rfind(']')
-                if json_start != -1 and json_end != -1 and json_start < json_end:
-                    json_str = response_text[json_start : json_end + 1]
-                else: 
-                    logger.warning(f"Could not find valid JSON list in LLM response: {response_text}")
-                    return None
-
-            actions = json.loads(json_str)
-            if not isinstance(actions, list): 
-                logger.warning(f"LLM response is not valid JSON list after parsing: {json_str}")
-                return None
-            return actions
-        except json.JSONDecodeError as e:
-            err_msg = f"Error decoding LLM JSON. Error: {e}.\nLLM Raw Response: {response_text}\nAttempted to parse: {json_str}"
-            logger.error(err_msg)
-            return None
-        except Exception as e:
-            logger.error(f"Error in LLM action planning: {e}", exc_info=True)
-            return None
-
-    def _find_element_by_ref(self, ref: str) -> Optional[WebElement]:
-        """Finds an element using the 'ref' string from the simplified DOM."""
-        if not self.driver or not ref: return None
-        logger.info(f"Attempting to find element by ref: '{ref}'")
-        
-        # Strategy: Prioritize ID, then Name, then fall back to more complex parsing if needed.
-        # The ref format is tag_id#ID_val_type#TYPE_val_name#NAME_val_role#ROLE_val_idx#INDEX_val
-        
-        parts = ref.split('_')
-        tag_name_from_ref = parts[0]
-
-        id_val, name_val, type_val, role_val, idx_val = None, None, None, None, None
-
-        for part in parts[1:]:
-            if part.startswith("id#"): id_val = part.split("#",1)[1]
-            elif part.startswith("name#"): name_val = part.split("#",1)[1]
-            elif part.startswith("type#"): type_val = part.split("#",1)[1]
-            elif part.startswith("role#"): role_val = part.split("#",1)[1]
-            elif part.startswith("idx#"): idx_val = part.split("#",1)[1]
-        
-        element: Optional[WebElement] = None
-        
-        try:
-            if id_val:
-                try:
-                    element = self.driver.find_element(By.ID, id_val)
-                    # Verify tag name if we have it, to avoid ID clashes across different tags
-                    if element and tag_name_from_ref and element.tag_name.lower() != tag_name_from_ref.lower():
-                         logger.warning(f"Ref specified tag '{tag_name_from_ref}' but ID '{id_val}' matched a '{element.tag_name}'. Mismatch.")
-                         # element = None # Decide if this should invalidate or just warn
-                    if element: logger.info(f"Found element by ID: {id_val}"); #return element
-                except NoSuchElementException:
-                    logger.debug(f"Element with ID '{id_val}' not found by direct ID search.")
-                    # Pass, try other methods if ID search fails or to confirm it's the right one
-
-            if not element and name_val: # If not found by ID, try by name
-                candidates = self.driver.find_elements(By.NAME, name_val)
-                # Filter by tag, type, role if available
-                for cand in candidates:
-                    if tag_name_from_ref and cand.tag_name.lower() != tag_name_from_ref.lower(): continue
-                    if type_val and cand.get_attribute('type') != type_val: continue
-                    if role_val and cand.get_attribute('role') != role_val: continue
-                    element = cand; break
-                if element: logger.info(f"Found element by name: {name_val}, filtered by other attributes."); #return element
-                else: logger.debug(f"No element matched name '{name_val}' after filtering or name not found.")
-
-
-            if not element and idx_val is not None: # Fallback to tag and index
-                try:
-                    index = int(idx_val)
-                    all_tags = self.driver.find_elements(By.TAG_NAME, tag_name_from_ref)
-                    visible_tags = [el for el in all_tags if el.is_displayed()]
-                    
-                    # Try to further filter visible_tags by type or role if provided, before picking by index
-                    filtered_visible_tags = []
-                    if type_val or role_val:
-                        for el_vis in visible_tags:
-                            matches_criteria = True
-                            if type_val and el_vis.get_attribute('type') != type_val: matches_criteria = False
-                            if role_val and el_vis.get_attribute('role') != role_val: matches_criteria = False
-                            if matches_criteria: filtered_visible_tags.append(el_vis)
-                    else:
-                        filtered_visible_tags = visible_tags
-
-                    if 0 <= index < len(filtered_visible_tags):
-                        element = filtered_visible_tags[index]
-                        logger.info(f"Found element by tag '{tag_name_from_ref}' and index {index} from filtered list.")
-                    else:
-                        logger.warning(f"Index {index} out of bounds for visible '{tag_name_from_ref}' elements matching ref '{ref}'. Found {len(filtered_visible_tags)} such elements.")
-                except ValueError:
-                    logger.warning(f"Invalid index '{idx_val}' in ref '{ref}'.")
-                except NoSuchElementException: # Should be caught by find_elements being empty
-                    logger.debug(f"No elements found for tag '{tag_name_from_ref}' during index-based search for ref '{ref}'.")
-            
-            if element and element.is_displayed():
-                if element.tag_name in ['input', 'button', 'select', 'textarea'] and not element.is_enabled():
-                    logger.warning(f"Element '{ref}' found but not enabled."); return None
-                logger.info(f"Successfully found and verified element for ref '{ref}' -> Tag: {element.tag_name}, ID: {element.id}")
-                return element
-            
-            if element and not element.is_displayed(): logger.warning(f"Element '{ref}' found but not visible.")
-            elif not element: logger.warning(f"Element with ref '{ref}' not found by any strategy.")
-            return None
-
-        except StaleElementReferenceException:
-            logger.warning(f"Element with ref '{ref}' became stale during search.")
-            return None
-        except Exception as e:
-            logger.error(f"Generic error finding element by ref '{ref}': {e}", exc_info=True)
-            return None
-
     def execute_actions(self, actions: List[Dict[str, Any]]):
-        """Executes a list of Selenium actions planned by the LLM."""
-        if not self.driver: logger.warning("WebDriver not initialized."); return
-        if not actions: logger.info("No actions to execute."); return
+        """Executes a list of actions planned by the ActionPlanner."""
+        if not self.driver: 
+            logger.warning("WebDriver not initialized. Cannot execute actions.")
+            return
+        if not actions: 
+            logger.info("No actions to execute.")
+            return
 
         for action_dict in actions: 
             action_type = action_dict.get("action_type")
-            logger.info(f"Executing action: {action_dict}")
+            logger.info(f"WebActions: Processing action: {action_dict}")
 
-            try:
-                if action_type == "type":
-                    ref, text_to_type = action_dict.get("ref"), action_dict.get("text")
-                    if ref is None or text_to_type is None: # Ensure both are present
-                        logger.warning(f"Skipping 'type' action due to missing 'ref' or 'text': {action_dict}")
-                        continue
-                    element = self._find_element_by_ref(ref)
-                    if element:
-                        element.clear() 
-                        element.send_keys(text_to_type)
-                        logger.info(f"Typed '{text_to_type}' into element '{ref}'")
-                    else:
-                        logger.warning(f"Failed to type: Element with ref '{ref}' not found or text not provided.")
-
-                elif action_type == "click":
-                    ref = action_dict.get("ref")
-                    if ref is None:
-                        logger.warning(f"Skipping 'click' action due to missing 'ref': {action_dict}")
-                        continue
-                    element = self._find_element_by_ref(ref)
-                    if element:
-                        try:
-                            element.click()
-                            logger.info(f"Clicked element '{ref}'")
-                        except Exception as click_err: # Catch errors during click, e.g. element not interactable
-                             logger.error(f"Error clicking element '{ref}': {click_err}", exc_info=True)
-                    else:
-                        logger.warning(f"Failed to click: Element with ref '{ref}' not found.")
-
-                elif action_type == "navigate":
-                    url = action_dict.get("url")
-                    if url:
-                        self.open_url(url)
-                    else:
-                        logger.warning("Failed to navigate: URL not provided.")
-                
-                elif action_type == "wait":
-                    seconds = action_dict.get("seconds")
-                    if isinstance(seconds, (int, float)) and seconds > 0:
-                        # Max wait time to prevent LLM from specifying too long waits
-                        wait_time = min(float(seconds), 5.0) 
-                        logger.info(f"Waiting for {wait_time} seconds...")
-                        time.sleep(wait_time)
-                    else:
-                        logger.warning(f"Invalid or missing 'seconds' for wait action: {seconds}. Waiting 1s by default.")
-                        time.sleep(1)
-
-                elif action_type == "analyze_page_content":
-                    question = action_dict.get("question_for_analyzer")
-                    if not question:
-                        logger.warning("Skipping 'analyze_page_content' action: 'question_for_analyzer' not provided.")
-                        continue
-                    if not self.html_analyzer:
-                        logger.error("HTMLAnalyzer not available. Cannot execute 'analyze_page_content'.")
-                        print("SYSTEM: Sorry, I cannot analyze the page content right now as the analyzer module is not working.")
-                        continue
-                    
-                    current_page_url = self.driver.current_url # Still useful for logging/context
-                    page_html_content = self.driver.page_source
-
-                    if not page_html_content:
-                        logger.warning("Could not get page source from the browser. Cannot analyze content.")
-                        print("SYSTEM: Could not retrieve current page content for analysis.")
-                        continue
-
-                    logger.info(f"Using HTMLAnalyzer to process content from current page: '{current_page_url}' with question: '{question}'")
-                    print(f"SYSTEM: Analyzing current page content with HTMLAnalyzer for: \"{question}\" (this may take a moment)...")
-                    
-                    analysis_result = self.html_analyzer.analyze_html_content(page_html_content, prompt_instruction=question)
-                    
-                    print("\n--- HTMLAnalyzer Response ---")
-                    if hasattr(analysis_result, '__iter__') and not isinstance(analysis_result, str):
-                        for chunk in analysis_result: # type: ignore
-                            print(chunk, end="", flush=True)
-                        print("\n-----------------------------\n")
-                    elif analysis_result:
-                        print(str(analysis_result))
-                        print("-----------------------------\n")
-                    else:
-                        print("HTMLAnalyzer returned no information or an error occurred.")
-                        logger.warning("HTMLAnalyzer returned no information or an error for 'analyze_page_content'.")
-                    # No further browser actions usually follow a page analysis in the same step.
-                    # The user will see the analysis and can then issue a new command.
-
+            if action_type in ["type", "click", "navigate", "wait"]:
+                if self.selenium_executor:
+                    self.selenium_executor.execute_selenium_action(action_dict)
                 else:
-                    logger.warning(f"Unknown action type: {action_type}")
+                    logger.error("SeleniumExecutor not available. Cannot execute browser action.")
+            elif action_type == "analyze_page_content":
+                question = action_dict.get("question_for_analyzer")
+                if not question:
+                    logger.warning("Skipping 'analyze_page_content' action: 'question_for_analyzer' not provided.")
+                    continue
+                if not self.html_analyzer:
+                    logger.error("HTMLAnalyzer not available. Cannot execute 'analyze_page_content'.")
+                    print("SYSTEM: Sorry, I cannot analyze the page content right now as the analyzer module is not working.")
+                    continue
+                
+                current_page_url = self.driver.current_url
+                page_html_content = self.driver.page_source
 
-                # Delay after action for page to potentially update
-                # Consider making this configurable or more intelligent (e.g., wait for specific conditions)
-                time.sleep(2) 
+                if not page_html_content:
+                    logger.warning("Could not get page source from the browser. Cannot analyze content.")
+                    print("SYSTEM: Could not retrieve current page content for analysis.")
+                    continue
 
-            except Exception as e: # Catch-all for errors during a single action's execution
-                logger.error(f"Error executing action {action_dict}: {e}", exc_info=True)
+                logger.info(f"Using HTMLAnalyzer to process content from current page: '{current_page_url}' with question: '{question}'")
+                print(f"SYSTEM: Analyzing current page content with HTMLAnalyzer for: \"{question}\" (this may take a moment)...")
+                
+                analysis_result = self.html_analyzer.analyze_html_content(page_html_content, prompt_instruction=question)
+                
+                print("\n--- HTMLAnalyzer Response ---")
+                if hasattr(analysis_result, '__iter__') and not isinstance(analysis_result, str):
+                    for chunk in analysis_result: # type: ignore
+                        print(chunk, end="", flush=True)
+                    print("\n-----------------------------\n")
+                elif analysis_result:
+                    print(str(analysis_result))
+                    print("-----------------------------\n")
+                else:
+                    print("HTMLAnalyzer returned no information or an error occurred.")
+                    logger.warning("HTMLAnalyzer returned no information or an error for 'analyze_page_content'.")
+            elif action_type == "list_tabs":
+                if self.selenium_executor:
+                    tabs = self.selenium_executor.list_open_tabs()
+                    if tabs:
+                        print("\n--- Open Tabs ---")
+                        for i, tab in enumerate(tabs):
+                            active_marker = "*" if tab["handle"] == self.driver.current_window_handle else " "
+                            print(f"  {active_marker} [{i}] Handle: {tab['handle']}, Title: '{tab['title'][:60]}', URL: '{tab['url'][:70]}'")
+                        print("-----------------")
+                    else:
+                        print("SYSTEM: No tabs found or error listing tabs.")
+                else:
+                    logger.error("SeleniumExecutor not available. Cannot list tabs.")
+                    print("SYSTEM: Unable to list tabs at the moment.")
+            elif action_type == "switch_tab":
+                target = action_dict.get("target")
+                if not target:
+                    logger.warning("Skipping 'switch_tab' action: 'target' not provided.")
+                    print("SYSTEM: Please specify a target for switching tabs (e.g., handle, title, or URL part).")
+                    continue
+                if self.selenium_executor:
+                    success = self.selenium_executor.switch_to_tab(target)
+                    if success:
+                        print(f"SYSTEM: Switched to tab related to '{target}'. Current page: '{self.driver.title}'")
+                    else:
+                        print(f"SYSTEM: Could not switch to a tab related to '{target}'.")
+                else:
+                    logger.error("SeleniumExecutor not available. Cannot switch tabs.")
+                    print("SYSTEM: Unable to switch tabs at the moment.")
+            else:
+                logger.warning(f"WebActions: Unknown action type: {action_type}")
+
+            # Delay after action for page to potentially update
+            # Consider making this configurable or more intelligent
+            if action_type not in ["analyze_page_content"] : # No need to sleep after analysis
+                 time.sleep(2) 
 
     def interact(self):
         """Starts an interactive loop for web actions."""
@@ -614,7 +412,16 @@ class WebActions:
                     logger.warning("Page appears to be empty or not loaded correctly.")
                     continue
 
-                actions = self.plan_actions_with_llm(intention, dom_before_action)
+                # Use the ActionPlanner to get actions
+                if self.action_planner:
+                    actions = self.action_planner.plan_actions(
+                        user_intention=intention, 
+                        simplified_dom=dom_before_action, 
+                        current_url=self.driver.current_url
+                    )
+                else:
+                    logger.error("ActionPlanner not available. Cannot plan actions.")
+                    actions = None
 
                 if actions:
                     logger.info(f"LLM planned actions: {actions}")
