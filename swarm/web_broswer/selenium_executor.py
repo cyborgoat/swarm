@@ -246,9 +246,46 @@ class SeleniumExecutor:
                         logger.warning(f"Attempted to 'type' into a non-typable element '{ref}' with tag '{element.tag_name}'. Skipping type operation.")
                         return True # Action was "attempted" in the sense it was processed
 
-                    element.clear()
-                    element.send_keys(text_to_type)
-                    logger.info(f"Typed '{text_to_type}' (using send_keys) into element '{ref}'")
+                    # Check if element is enabled and not readonly
+                    if not element.is_enabled():
+                        logger.warning(f"Element '{ref}' is disabled. Cannot type into it.")
+                        return True
+                    
+                    if element.get_attribute('readonly'):
+                        logger.warning(f"Element '{ref}' is readonly. Attempting JavaScript fallback.")
+                        try:
+                            self.driver.execute_script("arguments[0].value = arguments[1];", element, text_to_type)
+                            logger.info(f"Set value for readonly element '{ref}' using JavaScript.")
+                            return True
+                        except Exception as js_ex:
+                            logger.warning(f"Failed to set value for readonly element '{ref}' using JavaScript: {js_ex}")
+                            return True
+
+                    # Try to interact with the element
+                    try:
+                        # For some fields (especially date inputs), clicking first helps
+                        element.click()
+                        logger.debug(f"Clicked element '{ref}' before typing to ensure it's active.")
+                    except Exception as click_ex:
+                        logger.debug(f"Could not click element '{ref}' before typing: {click_ex}")
+
+                    try:
+                        element.clear()
+                        element.send_keys(text_to_type)
+                        logger.info(f"Typed '{text_to_type}' (using send_keys) into element '{ref}'")
+                    except Exception as type_ex:
+                        logger.warning(f"Failed to type into element '{ref}' using standard method: {type_ex}. Trying JavaScript fallback.")
+                        try:
+                            # Clear the field and set value using JavaScript
+                            self.driver.execute_script("arguments[0].value = '';", element)
+                            self.driver.execute_script("arguments[0].value = arguments[1];", element, text_to_type)
+                            # Trigger input events that some forms might require
+                            self.driver.execute_script("arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", element)
+                            self.driver.execute_script("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", element)
+                            logger.info(f"Set value for '{ref}' using JavaScript fallback to '{text_to_type}'.")
+                        except Exception as js_ex:
+                            logger.error(f"Both standard and JavaScript methods failed for element '{ref}': {js_ex}")
+                            return True
                     
                     # Check if it looks like a date input and try JS as a fallback if value not set correctly
                     # This is primarily for <input type="text"> being used for dates.
