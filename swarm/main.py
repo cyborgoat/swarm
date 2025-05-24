@@ -34,6 +34,4 @@ def main():
         print(f"❌ Error importing LLM module: {e}")
         print("   Make sure all dependencies are installed: uv pip install -e .")
 
-
-if __name__ == "__main__":
-    main() 
+# Removed if __name__ == "__main__": block 

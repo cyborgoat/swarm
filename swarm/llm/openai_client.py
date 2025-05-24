@@ -126,18 +126,14 @@ class OpenAIClient(BaseLLM):
     
     def _stream_response_with_tools(self, response) -> Iterator[Dict[str, Any]]:
         """Process streaming response with tool calls."""
-        content_buffer = ""
         tool_calls_buffer = {}
         
         for chunk in response:
             delta = chunk.choices[0].delta
             
-            # Handle content
             if delta.content is not None:
-                content_buffer += delta.content
                 yield {"type": "content", "content": delta.content}
             
-            # Handle tool calls
             if delta.tool_calls:
                 for tc in delta.tool_calls:
                     if tc.id not in tool_calls_buffer:

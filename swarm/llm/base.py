@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Iterator, Union, List
 from enum import Enum
-import json
 
 
 class ModelType(Enum):

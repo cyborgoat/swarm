@@ -16,6 +16,10 @@ dependencies = [
     # Async support
     "aiohttp>=3.8.0",
     "python-dotenv>=1.1.0",
+    # Web browsing and analysis
+    "requests>=2.25.0",
+    "beautifulsoup4>=4.9.0",
+    "dashscope>=1.16.0", # For Qwen models via DashScope
 ]
 
 [project.optional-dependencies]

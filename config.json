@@ -1,0 +1,16 @@
+{
+  "html_analyzer_default_model": "qwq-32b-preview",
+  "html_analyzer_default_prompt": "Provide a concise summary of the following web content:",
+  "html_analyzer_max_token_threshold": 2000,
+  "html_analyzer_max_chars_llm_fallback": 15000,
+  "html_analyzer_token_to_chars_ratio_heuristic": 1,
+  "html_analyzer_stream_output": true,
+  "llm_api_keys": {
+    "OPENAI_API_KEY": "YOUR_OPENAI_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
+    "ANTHROPIC_API_KEY": "YOUR_ANTHROPIC_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
+    "QWEN_API_KEY": "YOUR_QWEN_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
+    "DASHSCOPE_API_KEY": "YOUR_DASHSCOPE_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
+    "GOOGLE_API_KEY": "YOUR_GOOGLE_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
+    "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET"
+  }
+}

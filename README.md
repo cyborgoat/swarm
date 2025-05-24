@@ -357,3 +357,56 @@ tools = client.list_mcp_tools()
 ## License
 
 This project is licensed under the terms specified in the LICENSE file.
+
+### LLM Module API Reference
+
+(Details on `LLMFactory`, `BaseLLM`, specific clients, and configuration dataclasses would go here.)
+
+### Supported LLM Models
+
+The Swarm LLM module currently supports the following models through their respective clients:
+
+**OpenAI:**
+- gpt-4
+- gpt-4-turbo
+- gpt-4o
+- gpt-4o-mini
+- gpt-3.5-turbo
+- gpt-3.5-turbo-16k
+- gpt-4-vision-preview
+- gpt-4-turbo-preview
+
+**Anthropic:**
+- claude-3-opus-20240229
+- claude-3-sonnet-20240229
+- claude-3-haiku-20240307
+- claude-3-5-sonnet-20241022
+- claude-3-5-haiku-20241022
+
+**Qwen (via DashScope):**
+- qwen-turbo
+- qwen-plus
+- qwen-max
+- qwen-coder-turbo
+- qwq-32b-preview (Reasoning Model)
+
+**Gemini (Google):**
+- gemini-1.5-pro
+- gemini-1.5-flash
+- gemini-1.5-flash-8b
+- gemini-2.0-flash-exp
+- gemini-pro
+- gemini-pro-vision
+
+**DeepSeek:**
+- deepseek-chat
+- deepseek-reasoner (Reasoning Model)
+- deepseek-coder
+
+**Reasoning Models (Specialized):**
+- deepseek-reasoner
+- qwq-32b-preview
+
+These models can be instantiated using the `LLMFactory.create("model-name-here")` method.
+
+### Web Browser Module (`swarm.web_broswer`)
