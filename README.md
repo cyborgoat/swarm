@@ -181,7 +181,14 @@ response = client.generate_with_multimodal(messages)
 
 ## Environment Variables
 
-Set API keys using environment variables:
+Copy the `.env.sample` file to `.env.local` and fill in your API keys.
+
+```bash
+cp .env.sample .env.local
+# Now edit .env.local with your actual keys
+```
+
+Alternatively, set API keys directly as environment variables:
 
 ```bash
 # OpenAI

@@ -2,8 +2,6 @@
 Swarm - A comprehensive platform for multi-LLM integration and canvas-like applications.
 """
 
-from .main import main
-
 # Import LLM module for easy access
 try:
     from . import llm
@@ -14,4 +12,4 @@ except ImportError:
     LLMFactory = None
 
 __version__ = "0.1.0"
-__all__ = ["main", "llm", "LLMFactory"] 
+__all__ = ["llm", "LLMFactory"] 

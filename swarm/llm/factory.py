@@ -3,19 +3,34 @@ LLM Factory for easy model instantiation.
 Provides a unified interface to create any supported LLM client.
 """
 
-from typing import Dict, Any, Optional, Union
-from .base import LLMConfig, StreamConfig, ReasoningConfig, MCPConfig
+import json
+import os
+from typing import Dict, Any, Optional, Union, Type
+from .base import LLMConfig, StreamConfig, ReasoningConfig, MCPConfig, BaseLLM
 from .openai_client import OpenAIClient
 from .anthropic_client import AnthropicClient
 from .qwen_client import QwenClient
 from .gemini_client import GeminiClient
 from .deepseek_client import DeepSeekClient
 
+# Define a mapping for API key names based on provider type
+# This helps in fetching the correct API key from config or environment
+PROVIDER_API_KEY_NAMES = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY", # Qwen typically uses Dashscope
+    "gemini": "GOOGLE_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+}
 
 class LLMFactory:
-    """Factory class for creating LLM clients."""
+    """Factory class for creating LLM clients, now driven by config.json."""
     
-    # Model mappings
+    _config_data: Optional[Dict[str, Any]] = None
+    _llm_configurations: Optional[Dict[str, Dict[str, Any]]] = None
+    _api_keys_from_config: Optional[Dict[str, str]] = None
+
+    # Model mappings (could also be moved to config or dynamically determined)
     OPENAI_MODELS = {
         "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
         "gpt-3.5-turbo", "gpt-3.5-turbo-16k",
@@ -48,203 +63,288 @@ class LLMFactory:
     }
     
     @classmethod
+    def _load_json_config(cls, config_path: Optional[str] = None) -> None:
+        """Loads configurations from the specified JSON file or default 'config.json'."""
+        if cls._config_data is not None: # Already loaded
+            return
+
+        if config_path is None:
+            # Try to find config.json in the project root (assuming factory.py is in swarm/llm)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+            default_config_path = os.path.join(project_root, "config.json")
+            config_path = default_config_path
+
+        try:
+            print(f"LLMFactory: Loading configuration from {config_path}")
+            with open(config_path, 'r') as f:
+                cls._config_data = json.load(f)
+            
+            cls._llm_configurations = cls._config_data.get("llm_configurations", {})
+            cls._api_keys_from_config = cls._config_data.get("api_keys", {})
+            if not cls._llm_configurations:
+                 print("LLMFactory: 'llm_configurations' not found or empty in config.json.")
+            if not cls._api_keys_from_config:
+                 print("LLMFactory: 'api_keys' not found or empty in config.json.")
+
+        except FileNotFoundError:
+            print(f"LLMFactory: Configuration file {config_path} not found. Using defaults and environment variables.")
+            cls._config_data = {}
+            cls._llm_configurations = {}
+            cls._api_keys_from_config = {}
+        except json.JSONDecodeError:
+            print(f"LLMFactory: Error decoding JSON from {config_path}. Using defaults.")
+            cls._config_data = {}
+            cls._llm_configurations = {}
+            cls._api_keys_from_config = {}
+
+    @classmethod
+    def _get_provider_for_model(cls, model_name: str) -> Optional[str]:
+        """Determines the provider (openai, anthropic, etc.) for a given model name."""
+        model_name_lower = model_name.lower()
+        if model_name_lower in cls.OPENAI_MODELS or model_name_lower.startswith("gpt-"): return "openai"
+        if model_name_lower in cls.ANTHROPIC_MODELS or model_name_lower.startswith("claude-"): return "anthropic"
+        if model_name_lower in cls.QWEN_MODELS or model_name_lower.startswith(("qwen-", "qwq-")): return "qwen"
+        if model_name_lower in cls.GEMINI_MODELS or model_name_lower.startswith("gemini-"): return "gemini"
+        if model_name_lower in cls.DEEPSEEK_MODELS or model_name_lower.startswith("deepseek-"): return "deepseek"
+        # Fallback: check if any provider key is a prefix of the model name
+        for provider in PROVIDER_API_KEY_NAMES.keys():
+            if model_name_lower.startswith(provider + "-"): # e.g. "openai-gpt-4"
+                return provider
+        print(f"LLMFactory: Could not determine provider for model: {model_name}")
+        return None
+
+    @classmethod
+    def _resolve_api_key(cls, model_name: str, config_api_key: Optional[str]) -> Optional[str]:
+        """Resolves API key: config > api_keys section in config > environment variable."""
+        cls._load_json_config() # Ensure API keys from config are loaded
+
+        if config_api_key: # API key directly in the LLM configuration
+            return config_api_key
+
+        provider = cls._get_provider_for_model(model_name)
+        if provider:
+            api_key_name = PROVIDER_API_KEY_NAMES.get(provider)
+            if api_key_name:
+                # Check in "api_keys" section of config.json
+                key_from_config_section = cls._api_keys_from_config.get(api_key_name)
+                if key_from_config_section and key_from_config_section not in ["", f"YOUR_{api_key_name}_OR_LEAVE_BLANK_IF_ENV_SET"]: # Check if placeholder
+                    return key_from_config_section
+                # Check environment variable (clients typically handle this, but good for completeness)
+                # The actual client constructors will also look for env vars if api_key is None.
+                # env_key = os.getenv(api_key_name)
+                # if env_key: return env_key 
+        return None # Let the client try to find it in env or raise error
+
+    @classmethod
+    def _create_client_from_llm_config(cls, llm_config: LLMConfig) -> BaseLLM:
+        """Internal: Creates the LLM client instance from a fully resolved LLMConfig."""
+        model_name = llm_config.model_name
+        provider = cls._get_provider_for_model(model_name)
+
+        client_class: Optional[Type[BaseLLM]] = None
+        if provider == "openai": client_class = OpenAIClient
+        elif provider == "anthropic": client_class = AnthropicClient
+        elif provider == "qwen": client_class = QwenClient
+        elif provider == "gemini": client_class = GeminiClient
+        elif provider == "deepseek": client_class = DeepSeekClient
+        
+        if client_class:
+            return client_class(llm_config)
+        else:
+            # Fallback or attempt to guess based on common prefixes if not explicitly known
+            # This part can be expanded or made more robust
+            if model_name.startswith("gpt-") or model_name in cls.OPENAI_MODELS:
+                 return OpenAIClient(llm_config)
+            if model_name.startswith("claude-") or model_name in cls.ANTHROPIC_MODELS:
+                 return AnthropicClient(llm_config)
+            if model_name.startswith(("qwen-", "qwq-")) or model_name in cls.QWEN_MODELS:
+                 return QwenClient(llm_config)
+            if model_name.startswith("gemini-") or model_name in cls.GEMINI_MODELS:
+                 return GeminiClient(llm_config)
+            if model_name.startswith("deepseek-") or model_name in cls.DEEPSEEK_MODELS:
+                 return DeepSeekClient(llm_config)
+            raise ValueError(f"LLMFactory: Unknown or unsupported model provider for: {model_name}")
+
+    @classmethod
+    def create_from_config(
+        cls,
+        config_name: str,
+        config_path: Optional[str] = None,
+        **override_kwargs
+    ) -> BaseLLM:
+        """
+        Creates an LLM client based on a named configuration from config.json.
+        Overrides from kwargs take precedence.
+        """
+        cls._load_json_config(config_path)
+
+        if not cls._llm_configurations:
+            raise ValueError("LLMFactory: No LLM configurations loaded. Check config.json.")
+        
+        base_config_dict = cls._llm_configurations.get(config_name)
+        if not base_config_dict:
+            raise ValueError(f"LLMFactory: Configuration '{config_name}' not found in config.json.")
+
+        # Create a mutable copy and override with kwargs
+        effective_config_dict = base_config_dict.copy()
+        effective_config_dict.update(override_kwargs)
+        
+        # Extract nested config objects or use defaults
+        sc_dict = effective_config_dict.pop("stream_config", {})
+        rc_dict = effective_config_dict.pop("reasoning_config", {})
+        mc_dict = effective_config_dict.pop("mcp_config", {})
+
+        stream_config = StreamConfig(**sc_dict) if isinstance(sc_dict, dict) else StreamConfig()
+        reasoning_config = ReasoningConfig(**rc_dict) if isinstance(rc_dict, dict) else ReasoningConfig()
+        mcp_config = MCPConfig(**mc_dict) if isinstance(mc_dict, dict) else MCPConfig()
+
+        # Resolve API key
+        model_name = effective_config_dict.get("model_name")
+        if not model_name:
+            raise ValueError("LLMFactory: 'model_name' is required in the configuration.")
+        
+        # API key from the llm_configuration entry itself takes highest precedence IF NOT NULL
+        config_entry_api_key = effective_config_dict.get("api_key")
+        
+        final_api_key = cls._resolve_api_key(model_name, config_entry_api_key)
+
+        llm_config_obj = LLMConfig(
+            model_name=model_name,
+            api_key=final_api_key,
+            base_url=effective_config_dict.get("base_url"),
+            temperature=float(effective_config_dict.get("temperature", 0.7)),
+            max_tokens=int(effective_config_dict["max_tokens"]) if effective_config_dict.get("max_tokens") is not None else None,
+            stream_config=stream_config,
+            reasoning_config=reasoning_config,
+            mcp_config=mcp_config,
+            extra_params=effective_config_dict.get("extra_params", {})
+        )
+        
+        return cls._create_client_from_llm_config(llm_config_obj)
+
+    @classmethod
     def create(
         cls,
         model_name: str,
         api_key: Optional[str] = None,
-        stream: bool = False,
+        base_url: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
-        show_thinking: bool = False,
-        base_url: Optional[str] = None,
-        **kwargs
-    ) -> Union[OpenAIClient, AnthropicClient, QwenClient, GeminiClient, DeepSeekClient]:
+        stream: bool = False, # Kept for backward compatibility / direct creation
+        show_thinking: bool = False, # Kept for backward compatibility
+        # mcp specific params could be added here if direct creation needs them
+        **kwargs # For extra_params and other potential overrides
+    ) -> BaseLLM:
         """
-        Create an LLM client based on the model name.
-        
-        Args:
-            model_name: Name of the model to use
-            api_key: API key for the service
-            stream: Whether to enable streaming
-            temperature: Temperature for generation
-            max_tokens: Maximum tokens to generate
-            show_thinking: Whether to show reasoning process (for reasoning models)
-            base_url: Custom base URL for the API
-            **kwargs: Additional parameters
-            
-        Returns:
-            Appropriate LLM client instance
+        Creates an LLM client directly with specified parameters.
+        Consider using create_from_config for managed configurations.
         """
-        
-        # Create configurations
-        stream_config = StreamConfig(enabled=stream)
-        reasoning_config = ReasoningConfig(show_thinking=show_thinking)
-        mcp_config = MCPConfig()
+        cls._load_json_config() # Load api_keys for potential fallback
+
+        # Resolve API key if not directly provided
+        resolved_api_key = api_key
+        if not resolved_api_key:
+             resolved_api_key = cls._resolve_api_key(model_name, None) # Check config api_keys and env
+
+        stream_config = StreamConfig(enabled=stream, chunk_size=kwargs.pop("stream_chunk_size", None), timeout=kwargs.pop("stream_timeout", None))
+        reasoning_config = ReasoningConfig(show_thinking=show_thinking, max_thinking_tokens=kwargs.pop("reasoning_max_tokens", None), reasoning_effort=kwargs.pop("reasoning_effort", None))
+        mcp_config = MCPConfig(enabled=kwargs.pop("mcp_enabled", False), server_url=kwargs.pop("mcp_server_url", None), tools=kwargs.pop("mcp_tools", None), max_tokens=kwargs.pop("mcp_max_tokens", None))
         
         config = LLMConfig(
             model_name=model_name,
-            api_key=api_key,
+            api_key=resolved_api_key, # Use the resolved one
             base_url=base_url,
             temperature=temperature,
             max_tokens=max_tokens,
             stream_config=stream_config,
             reasoning_config=reasoning_config,
             mcp_config=mcp_config,
-            extra_params=kwargs
+            extra_params=kwargs # Remaining kwargs are passed as extra_params
         )
         
-        # Determine which client to use based on model name
-        if cls._is_openai_model(model_name):
-            return OpenAIClient(config)
-        elif cls._is_anthropic_model(model_name):
-            return AnthropicClient(config)
-        elif cls._is_qwen_model(model_name):
-            return QwenClient(config)
-        elif cls._is_gemini_model(model_name):
-            return GeminiClient(config)
-        elif cls._is_deepseek_model(model_name):
-            return DeepSeekClient(config)
-        else:
-            raise ValueError(f"Unknown model: {model_name}")
-    
+        return cls._create_client_from_llm_config(config)
+
+    # Convenience methods (can be updated or removed if create_from_config is preferred)
     @classmethod
-    def create_openai(
-        cls,
-        model: str = "gpt-4",
-        api_key: Optional[str] = None,
-        **kwargs
-    ) -> OpenAIClient:
-        """Create an OpenAI client."""
-        return cls.create(model, api_key=api_key, **kwargs)
-    
+    def create_openai(cls, model: str = "gpt-4o", **kwargs) -> OpenAIClient: # Ensure return type matches BaseLLM or its subtypes
+        return cls.create(model_name=model, **kwargs) # type: ignore
+
     @classmethod
-    def create_anthropic(
-        cls,
-        model: str = "claude-3-sonnet-20240229",
-        api_key: Optional[str] = None,
-        **kwargs
-    ) -> AnthropicClient:
-        """Create an Anthropic client."""
-        return cls.create(model, api_key=api_key, **kwargs)
-    
+    def create_anthropic(cls, model: str = "claude-3-sonnet-20240229", **kwargs) -> AnthropicClient:
+        return cls.create(model_name=model, **kwargs) # type: ignore
+
     @classmethod
-    def create_qwen(
-        cls,
-        model: str = "qwen-turbo",
-        api_key: Optional[str] = None,
-        **kwargs
-    ) -> QwenClient:
-        """Create a Qwen client."""
-        return cls.create(model, api_key=api_key, **kwargs)
-    
+    def create_qwen(cls, model: str = "qwen-turbo", **kwargs) -> QwenClient:
+        return cls.create(model_name=model, **kwargs) # type: ignore
+
     @classmethod
-    def create_gemini(
-        cls,
-        model: str = "gemini-1.5-pro",
-        api_key: Optional[str] = None,
-        **kwargs
-    ) -> GeminiClient:
-        """Create a Gemini client."""
-        return cls.create(model, api_key=api_key, **kwargs)
-    
+    def create_gemini(cls, model: str = "gemini-1.5-pro", **kwargs) -> GeminiClient:
+        return cls.create(model_name=model, **kwargs) # type: ignore
+
     @classmethod
-    def create_deepseek(
-        cls,
-        model: str = "deepseek-chat",
-        api_key: Optional[str] = None,
-        **kwargs
-    ) -> DeepSeekClient:
-        """Create a DeepSeek client."""
-        return cls.create(model, api_key=api_key, **kwargs)
+    def create_deepseek(cls, model: str = "deepseek-chat", **kwargs) -> DeepSeekClient:
+        return cls.create(model_name=model, **kwargs) # type: ignore
     
     @classmethod
     def create_reasoning_model(
         cls,
-        model: str = "deepseek-reasoner",
-        api_key: Optional[str] = None,
+        model: str = "deepseek-reasoner", # Default to a known reasoning model
         show_thinking: bool = True,
         **kwargs
-    ) -> Union[DeepSeekClient, QwenClient]:
-        """Create a reasoning model with thinking display enabled."""
+    ) -> BaseLLM: # Return BaseLLM
         if model not in cls.REASONING_MODELS:
-            raise ValueError(f"Model {model} is not a reasoning model. "
-                           f"Available reasoning models: {list(cls.REASONING_MODELS)}")
+            # Attempt to find if a config for this model exists and if it enables reasoning
+            cls._load_json_config()
+            config_entry = cls._llm_configurations.get(model, {}) if cls._llm_configurations else {}
+            reasoning_config = config_entry.get("reasoning_config", {})
+            if not reasoning_config.get("show_thinking", False) and not show_thinking : # if not enabled by default or override
+                 print(f"LLMFactory: Warning - Model {model} might not be pre-configured for reasoning or reasoning is not explicitly enabled.")
         
-        return cls.create(
-            model, 
-            api_key=api_key, 
-            show_thinking=show_thinking, 
-            **kwargs
-        )
-    
+        # Pass show_thinking to the create method
+        return cls.create(model_name=model, show_thinking=show_thinking, **kwargs)
+
     @classmethod
     def list_models(cls) -> Dict[str, list]:
-        """List all available models by provider."""
         return {
             "openai": list(cls.OPENAI_MODELS),
             "anthropic": list(cls.ANTHROPIC_MODELS),
             "qwen": list(cls.QWEN_MODELS),
             "gemini": list(cls.GEMINI_MODELS),
-            "deepseek": list(cls.DEEPSEEK_MODELS)
+            "deepseek": list(cls.DEEPSEEK_MODELS),
         }
-    
+
     @classmethod
     def list_reasoning_models(cls) -> list:
-        """List all available reasoning models."""
         return list(cls.REASONING_MODELS)
-    
-    @classmethod
-    def _is_openai_model(cls, model_name: str) -> bool:
-        """Check if model is an OpenAI model."""
-        return model_name in cls.OPENAI_MODELS or model_name.startswith("gpt-")
-    
-    @classmethod
-    def _is_anthropic_model(cls, model_name: str) -> bool:
-        """Check if model is an Anthropic model."""
-        return model_name in cls.ANTHROPIC_MODELS or model_name.startswith("claude-")
-    
-    @classmethod
-    def _is_qwen_model(cls, model_name: str) -> bool:
-        """Check if model is a Qwen model."""
-        return model_name in cls.QWEN_MODELS or model_name.startswith(("qwen-", "qwq-"))
-    
-    @classmethod
-    def _is_gemini_model(cls, model_name: str) -> bool:
-        """Check if model is a Gemini model."""
-        return model_name in cls.GEMINI_MODELS or model_name.startswith("gemini-")
-    
-    @classmethod
-    def _is_deepseek_model(cls, model_name: str) -> bool:
-        """Check if model is a DeepSeek model."""
-        return model_name in cls.DEEPSEEK_MODELS or model_name.startswith("deepseek-")
 
+    @classmethod
+    def list_available_configs(cls) -> list:
+        cls._load_json_config()
+        return list(cls._llm_configurations.keys()) if cls._llm_configurations else []
 
-# Convenience functions for quick access
-def create_openai_client(model: str = "gpt-4", **kwargs) -> OpenAIClient:
-    """Quick function to create OpenAI client."""
+# Convenience functions (might need update or removal if factory methods are primary)
+# These would ideally call LLMFactory.create directly.
+# Example:
+# def create_openai_client(model: str = "gpt-4", **kwargs) -> OpenAIClient:
+#     return LLMFactory.create_openai(model, **kwargs) # This is fine
+
+# ... (other convenience functions remain similar for now)
+# Keeping convenience functions as they delegate to the updated LLMFactory.create
+def create_openai_client(model: str = "gpt-4o", **kwargs) -> OpenAIClient:
     return LLMFactory.create_openai(model, **kwargs)
 
-
 def create_anthropic_client(model: str = "claude-3-sonnet-20240229", **kwargs) -> AnthropicClient:
-    """Quick function to create Anthropic client."""
     return LLMFactory.create_anthropic(model, **kwargs)
 
-
 def create_qwen_client(model: str = "qwen-turbo", **kwargs) -> QwenClient:
-    """Quick function to create Qwen client."""
     return LLMFactory.create_qwen(model, **kwargs)
 
-
 def create_gemini_client(model: str = "gemini-1.5-pro", **kwargs) -> GeminiClient:
-    """Quick function to create Gemini client."""
     return LLMFactory.create_gemini(model, **kwargs)
 
-
 def create_deepseek_client(model: str = "deepseek-chat", **kwargs) -> DeepSeekClient:
-    """Quick function to create DeepSeek client."""
     return LLMFactory.create_deepseek(model, **kwargs)
 
-
-def create_reasoning_client(model: str = "deepseek-reasoner", show_thinking: bool = True, **kwargs):
-    """Quick function to create reasoning model client."""
+def create_reasoning_client(model: str = "deepseek-reasoner", show_thinking: bool = True, **kwargs) -> BaseLLM:
     return LLMFactory.create_reasoning_model(model, show_thinking=show_thinking, **kwargs) 

@@ -20,6 +20,8 @@ dependencies = [
     "requests>=2.25.0",
     "beautifulsoup4>=4.9.0",
     "dashscope>=1.16.0", # For Qwen models via DashScope
+    "selenium>=4.0.0",
+    "webdriver-manager>=4.0.0",
 ]
 
 [project.optional-dependencies]

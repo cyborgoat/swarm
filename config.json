@@ -1,16 +1,95 @@
 {
-  "html_analyzer_default_model": "qwq-32b-preview",
+  "html_analyzer_default_model": "qwen-turbo",
   "html_analyzer_default_prompt": "Provide a concise summary of the following web content:",
   "html_analyzer_max_token_threshold": 2000,
   "html_analyzer_max_chars_llm_fallback": 15000,
   "html_analyzer_token_to_chars_ratio_heuristic": 1,
   "html_analyzer_stream_output": true,
-  "llm_api_keys": {
+  "api_keys": {
     "OPENAI_API_KEY": "YOUR_OPENAI_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
     "ANTHROPIC_API_KEY": "YOUR_ANTHROPIC_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
-    "QWEN_API_KEY": "YOUR_QWEN_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
     "DASHSCOPE_API_KEY": "YOUR_DASHSCOPE_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
     "GOOGLE_API_KEY": "YOUR_GOOGLE_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET",
     "DEEPSEEK_API_KEY": "YOUR_DEEPSEEK_API_KEY_OR_LEAVE_BLANK_IF_ENV_SET"
+  },
+  "default_llm_config_for_web_actions": "web_actions_openai_gpt4o",
+  "llm_configurations": {
+    "default_openai": {
+      "model_name": "gpt-4o",
+      "api_key": null,
+      "base_url": null,
+      "temperature": 0.7,
+      "max_tokens": 2048,
+      "stream_config": {
+        "enabled": false,
+        "chunk_size": null,
+        "timeout": null
+      },
+      "reasoning_config": {
+        "show_thinking": false,
+        "max_thinking_tokens": null,
+        "reasoning_effort": null
+      },
+      "mcp_config": {
+        "enabled": false,
+        "server_url": null,
+        "tools": [],
+        "max_tokens": null
+      },
+      "extra_params": {}
+    },
+    "web_actions_openai_gpt4o": {
+      "model_name": "gpt-4o",
+      "api_key": null,
+      "base_url": null,
+      "temperature": 0.5,
+      "max_tokens": 2000,
+      "stream_config": {
+        "enabled": false
+      },
+      "reasoning_config": {
+        "show_thinking": false
+      },
+      "mcp_config": {
+        "enabled": false
+      },
+      "extra_params": {}
+    },
+    "default_qwen_streaming": {
+      "model_name": "qwen-turbo",
+      "api_key": null,
+      "base_url": null,
+      "temperature": 0.75,
+      "max_tokens": 1500,
+      "stream_config": {
+        "enabled": true,
+        "chunk_size": null,
+        "timeout": 600
+      },
+      "reasoning_config": {
+        "show_thinking": false
+      },
+      "mcp_config": {
+        "enabled": false
+      },
+      "extra_params": {}
+    },
+    "deepseek_coder_streaming": {
+      "model_name": "deepseek-coder",
+      "api_key": null,
+      "base_url": null,
+      "temperature": 0.5,
+      "max_tokens": 4096,
+      "stream_config": {
+        "enabled": true
+      },
+      "reasoning_config": {
+        "show_thinking": false
+      },
+      "mcp_config": {
+        "enabled": false
+      },
+      "extra_params": {}
+    }
   }
 }

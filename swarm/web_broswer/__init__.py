@@ -1,5 +1,6 @@
 # Web Browser Package
 
 from .html_analyzer import HTMLAnalyzer
+from .web_actions import WebActions
 
-__all__ = ["HTMLAnalyzer"] 
+__all__ = ["HTMLAnalyzer", "WebActions"] 
