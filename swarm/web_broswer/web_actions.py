@@ -56,8 +56,10 @@ def load_web_actions_specific_config() -> dict:
 WEB_ACTIONS_SETTINGS = load_web_actions_specific_config()
 
 # --- Fallback values for WebActions if not in agent_config.json or section is incomplete ---
-FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME = "web_actions_openai_gpt4o" # Should match a config in llm_config.json
+# FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME = "web_actions_openai_gpt4o" # Removed: No hardcoded fallback for LLM config name
 FALLBACK_WEB_ACTIONS_MAX_RETRIES = 3
+FALLBACK_DOM_MAX_ELEMENTS = 150 # Default max elements for simplified DOM
+FALLBACK_DOM_TEXT_PREVIEW_LENGTH = 60 # Default preview length for text in DOM
 
 class WebActions:
     """
@@ -71,6 +73,7 @@ class WebActions:
         Args:
             llm_config_name: The name of the LLM configuration (from llm_config.json) to use.
                              If None, uses WEB_ACTIONS_LLM_CONFIG_NAME env var, then default from agent_config.json.
+                             This configuration must exist in llm_config.json.
             headless: Whether to run the browser in headless mode.
             **llm_override_kwargs: Optional keyword arguments to override specific settings within the chosen LLM configuration.
         """
@@ -98,13 +101,26 @@ class WebActions:
             raise
 
         # Determine LLM configuration name
-        chosen_llm_config_name = llm_config_name or \
-                                 os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG) or \
-                                 WEB_ACTIONS_SETTINGS.get("default_llm_config_name", FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME)
+        if llm_config_name:
+            chosen_llm_config_name = llm_config_name
+        elif os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG):
+            chosen_llm_config_name = os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG)
+        else:
+            chosen_llm_config_name = WEB_ACTIONS_SETTINGS.get("default_llm_config_name")
+
+        if not chosen_llm_config_name:
+            err_msg = "WebActions: LLM configuration name not provided. Please specify via argument, environment variable, or in agent_config.json."
+            logger.critical(err_msg)
+            self.close() # Attempt to close browser if initialized
+            raise ValueError(err_msg)
         
         self.max_interaction_retries = WEB_ACTIONS_SETTINGS.get("max_interaction_retries", FALLBACK_WEB_ACTIONS_MAX_RETRIES)
 
-        logger.info(f"WebActions: Using LLM configuration: {chosen_llm_config_name}, Max Retries: {self.max_interaction_retries}")
+        # New configuration parameters for DOM simplification
+        self.dom_max_elements = WEB_ACTIONS_SETTINGS.get("dom_max_elements", FALLBACK_DOM_MAX_ELEMENTS)
+        self.dom_text_preview_length = WEB_ACTIONS_SETTINGS.get("dom_text_preview_length", FALLBACK_DOM_TEXT_PREVIEW_LENGTH)
+
+        logger.info(f"WebActions: Attempting to use LLM configuration: {chosen_llm_config_name}, Max Retries: {self.max_interaction_retries}, DOM Max Elements: {self.dom_max_elements}, DOM Text Preview Length: {self.dom_text_preview_length}")
         
         # Ensure that for action planning, streaming is disabled.
         # We construct the override for stream_config.
@@ -117,22 +133,16 @@ class WebActions:
                 **planning_llm_overrides # Pass merged overrides
             )
             logger.info(f"LLM client for WebActions created successfully using config: {chosen_llm_config_name} (streaming explicitly disabled for planning)")
-        except ValueError as ve:
-            logger.error(f"WebActions: Failed to create LLM from config '{chosen_llm_config_name}': {ve}", exc_info=True)
-            logger.warning(f"WebActions: Falling back to LLM config '{FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME}' (streaming explicitly disabled for planning).")
-            try:
-                self.llm_client: BaseLLM = LLMFactory.create_from_config(
-                    config_name=FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME, 
-                    **planning_llm_overrides # Apply same stream override to fallback
-                )
-            except Exception as fallback_e:
-                logger.critical(f"WebActions: Critical error: Fallback LLM creation also failed: {fallback_e}", exc_info=True)
-                self.close()
-                raise
-        except Exception as e:
-            logger.critical(f"WebActions: An unexpected error occurred during LLM client initialization: {e}", exc_info=True)
+        except ValueError as ve: # Raised by LLMFactory if config_name is not found
+            err_msg = f"WebActions: Failed to create LLM from specified config '{chosen_llm_config_name}': {ve}. Ensure this configuration exists in llm_config.json."
+            logger.critical(err_msg, exc_info=True)
+            self.close() # Attempt to close browser if initialized
+            raise ValueError(err_msg) from ve # Re-raise with more context
+        except Exception as e: # Catch any other unexpected errors during LLM init
+            err_msg = f"WebActions: An unexpected error occurred during LLM client initialization with config '{chosen_llm_config_name}': {e}"
+            logger.critical(err_msg, exc_info=True)
             self.close()
-            raise
+            raise Exception(err_msg) from e # Re-raise with more context
             
         # Initialize HTMLAnalyzer
         # HTMLAnalyzer will load its own configuration from agent_config.json
@@ -176,76 +186,94 @@ class WebActions:
         other_tags = ['div', 'span', 'li', 'h1', 'h2', 'h3', 'p', 'img', 'nav', 'footer', 'main', 'article', 'section']
         
         processed_elements_count = 0
-        max_elements_to_process = 200 # Limit to prevent overly long DOM strings
+        # Use configured max_elements_to_process
+        # max_elements_to_process = 200 # Limit to prevent overly long DOM strings
+        # Derived lengths for attribute text previews to be more concise
+        attribute_value_preview_length = max(15, self.dom_text_preview_length // 3)
+        value_attr_preview_length = max(20, self.dom_text_preview_length // 2)
+
 
         for tag_name in tag_priority + other_tags:
-            if processed_elements_count >= max_elements_to_process:
-                logger.info(f"Reached max elements ({max_elements_to_process}) for simplified DOM.")
+            if processed_elements_count >= self.dom_max_elements: # Use configured limit
+                logger.info(f"Reached max elements ({self.dom_max_elements}) for simplified DOM.")
                 break
+            
             try:
-                elements = self.driver.find_elements(By.TAG_NAME, tag_name)
-                for i, element in enumerate(elements):
-                    if processed_elements_count >= max_elements_to_process: break
-                    try:
-                        if not element.is_displayed(): continue
-                        is_enabled = True
-                        if tag_name in ['input', 'button', 'select', 'textarea']:
-                            is_enabled = element.is_enabled()
-                        if not is_enabled: continue
-
-                        element_id = element.get_attribute('id')
-                        element_name = element.get_attribute('name')
-                        element_text = element.text.strip() if element.text else ""
-                        element_type = element.get_attribute('type')
-                        href = element.get_attribute('href') if tag_name == 'a' else None
-                        aria_label = element.get_attribute('aria-label')
-                        placeholder = element.get_attribute('placeholder')
-                        role = element.get_attribute('role')
-                        value = element.get_attribute('value') if tag_name in ['input', 'textarea'] else None
-                        alt_text = element.get_attribute('alt') if tag_name == 'img' else None
-
-
-                        # Create a more robust ref
-                        ref_parts = [tag_name]
-                        if element_id: ref_parts.append(f"id#{element_id}")
-                        if element_name: ref_parts.append(f"name#{element_name}")
-                        if element_type: ref_parts.append(f"type#{element_type}")
-                        if role: ref_parts.append(f"role#{role}")
-                        # Fallback to index if not enough unique identifiers
-                        if len(ref_parts) == 1 or not (element_id or element_name) :
-                           ref_parts.append(f"idx#{i}")
-                        
-                        llm_ref = "_".join(ref_parts)
-                        
-                        info = f"<{tag_name} ref='{llm_ref}'"
-                        if element_id: info += f" id='{element_id}'"
-                        if element_name: info += f" name='{element_name}'"
-                        if element_type: info += f" type='{element_type}'"
-                        if role: info += f" role='{role}'"
-                        if href and href.strip() and href.strip() != '#': info += f" href='{href.strip()}'"
-                        if aria_label: info += f" aria-label='{aria_label}'"
-                        if placeholder: info += f" placeholder='{placeholder}'"
-                        if value: info += f" value='{(value[:30] + '...') if len(value) > 30 else value}'" # Preview value
-                        if alt_text: info += f" alt='{alt_text}'"
-                        
-                        text_content_parts = [t for t in [element_text, aria_label, placeholder, alt_text] if t]
-                        text_content = " | ".join(text_content_parts)
-                        
-                        text_preview = (text_content[:70] + '...') if text_content and len(text_content) > 70 else text_content
-                        
-                        if text_preview: info += f">{text_preview.replace('<', '&lt;').replace('>', '&gt;')}</{tag_name}>"
-                        else: info += " />"
-                        elements_info.append(info)
-                        processed_elements_count += 1
-                    except StaleElementReferenceException: 
-                        logger.debug(f"Stale element encountered for tag {tag_name}, skipping.")
-                        continue
-                    except Exception as el_ex: 
-                        logger.debug(f"Error processing an element of tag {tag_name}: {el_ex}", exc_info=False)
-                        continue 
-            except Exception as find_ex: 
+                all_elements_for_tag = self.driver.find_elements(By.TAG_NAME, tag_name)
+            except Exception as find_ex:
                 logger.debug(f"Error finding elements for tag {tag_name}: {find_ex}", exc_info=False)
-                continue 
+                continue
+
+            visible_idx_for_llm_this_tag = 0 # Reset for each tag type
+
+            for element in all_elements_for_tag:
+                if processed_elements_count >= self.dom_max_elements: 
+                    # Need to break outer loop too if global limit reached mid-tag processing
+                    # This break only breaks the inner loop. Consider a flag or restructuring if this becomes an issue.
+                    break 
+                try:
+                    if not element.is_displayed(): continue
+                    is_enabled = True
+                    if tag_name in ['input', 'button', 'select', 'textarea']:
+                        is_enabled = element.is_enabled()
+                    if not is_enabled: continue
+
+                    element_id = element.get_attribute('id')
+                    element_name = element.get_attribute('name')
+                    element_text = element.text.strip() if element.text else ""
+                    element_type = element.get_attribute('type')
+                    href = element.get_attribute('href') if tag_name == 'a' else None
+                    aria_label = element.get_attribute('aria-label')
+                    placeholder = element.get_attribute('placeholder')
+                    role = element.get_attribute('role')
+                    value = element.get_attribute('value') if tag_name in ['input', 'textarea'] else None
+                    alt_text = element.get_attribute('alt') if tag_name == 'img' else None
+
+
+                    # Create a more robust ref
+                    ref_parts = [tag_name]
+                    if element_id: ref_parts.append(f"id#{element_id}")
+                    if element_name: ref_parts.append(f"name#{element_name}")
+                    if element_type: ref_parts.append(f"type#{element_type}")
+                    if role: ref_parts.append(f"role#{role}")
+                    
+                    # If no strong identifiers, use the visible_idx_for_llm_this_tag for this tag
+                    if len(ref_parts) == 1 or not (element_id or element_name) :
+                       ref_parts.append(f"idx#{visible_idx_for_llm_this_tag}")
+                    
+                    llm_ref = "_".join(ref_parts)
+                    
+                    info = f"<{tag_name} ref='{llm_ref}'"
+                    if element_id: info += f" id='{element_id}'"
+                    if element_name: info += f" name='{element_name}'"
+                    if element_type: info += f" type='{element_type}'"
+                    if role: info += f" role='{role}'"
+                    if href and href.strip() and href.strip() != '#': info += f" href='{href.strip()}'"
+                    
+                    # Add other attributes with truncation
+                    if aria_label: info += f" aria-label='{(aria_label[:attribute_value_preview_length] + '...') if len(aria_label) > attribute_value_preview_length else aria_label}'"
+                    if placeholder: info += f" placeholder='{(placeholder[:attribute_value_preview_length] + '...') if len(placeholder) > attribute_value_preview_length else placeholder}'"
+                    if value: info += f" value='{(value[:value_attr_preview_length] + '...') if len(value) > value_attr_preview_length else value}'"
+                    if alt_text: info += f" alt='{(alt_text[:attribute_value_preview_length] + '...') if len(alt_text) > attribute_value_preview_length else alt_text}'"
+                    
+                    text_content_parts = [t for t in [element_text, aria_label, placeholder, alt_text] if t]
+                    text_content = " | ".join(text_content_parts)
+                    
+                    # Use configured dom_text_preview_length for the main text node
+                    text_preview = (text_content[:self.dom_text_preview_length] + '...') if text_content and len(text_content) > self.dom_text_preview_length else text_content
+                    
+                    if text_preview: info += f">{text_preview.replace('<', '&lt;').replace('>', '&gt;')}</{tag_name}>"
+                    else: info += " />"
+                    elements_info.append(info)
+                    processed_elements_count += 1
+                    visible_idx_for_llm_this_tag += 1 # Increment for the next valid element of this tag
+                    
+                except StaleElementReferenceException: 
+                    logger.debug(f"Stale element encountered for tag {tag_name}, skipping.")
+                    continue
+                except Exception as el_ex: 
+                    logger.debug(f"Error processing an element of tag {tag_name}: {el_ex}", exc_info=False)
+                    continue 
         simplified_dom = "\n".join(elements_info)
         if not simplified_dom: return "No interactive elements found or page not loaded."
         # logger.info(f"Simplified DOM (first 500 chars):\n{simplified_dom[:500]}")
@@ -275,7 +303,13 @@ class WebActions:
             f'User Intention: "{user_intention}"',
             "Output the actions as a JSON list of dictionaries. Each dictionary must have an \"action_type\" ",
             "(e.g., \"type\", \"click\", \"navigate\", \"wait\", \"analyze_page_content\"), and other necessary parameters based on the action_type ",
-            "(e.g., \"ref\", \"text\", \"url\", \"seconds\", \"question_for_analyzer\"). ",
+            "(e.g., \"ref\", \"text\", \"url\", \"seconds\", \"question_for_analyzer\"). ",            
+            "Guidance for clicking links (<a> tags for navigation):",
+            "  - Pay close attention to the link's text content, its `aria-label`, and its `href` attribute as shown in the simplified DOM.",
+            "  - Prefer links where the text, `aria-label`, or `href` clearly matches the user's stated navigation goal.",
+            "  - Example: If the user says 'go to the careers page', look for a link with text like 'Careers' or an href like '/careers'.",
+            "  - If you must use an `idx#` reference for a link (e.g., `a_idx#3`), be very careful. This index is 0-based relative to the visible `<a>` tags presented in the simplified DOM.",
+            "  - Double-check that the chosen `idx#` is valid and the link is the most plausible one based on all available information (text, href, context).",
             "Ensure the output is ONLY the JSON list, starting with [ and ending with ].",
             "Example for typing and clicking:",
             "```json",

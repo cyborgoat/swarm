@@ -24,12 +24,12 @@ AGENT_CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__))
 
 # --- Default values for HTMLAnalyzer if not found in agent_config.json ---
 # These are fallback values if agent_config.json is missing or html_analyzer section is incomplete.
-FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME = "default_qwen_streaming" # Fallback LLM config name
+# FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME = "default_qwen_streaming" # Removed: No hardcoded fallback for LLM config name
 FALLBACK_HTML_ANALYZER_PROMPT = "Analyze the following web content and tell me what it's about and its key points:"
 FALLBACK_HTML_ANALYZER_MAX_TOKEN_THRESHOLD = 2000
 FALLBACK_HTML_ANALYZER_MAX_CHARS_LLM_FALLBACK = 15000
 FALLBACK_HTML_ANALYZER_TOKEN_TO_CHARS_RATIO = 1
-FALLBACK_HTML_ANALYZER_STREAM_OUTPUT = False # Default for streaming if not in config
+# FALLBACK_HTML_ANALYZER_STREAM_OUTPUT = False # Removed as stream output is now solely from LLM config
 
 def load_config() -> dict:
     """Loads configuration from config.json."""
@@ -83,13 +83,21 @@ class HTMLAnalyzer:
 
         Args:
             llm_config_name: Optional. The name of the LLM configuration (from llm_config.json) to use.
-                             If None, uses the default from agent_config.json, then a hardcoded fallback.
+                             If None, uses the default from agent_config.json.
+                             This configuration must exist in llm_config.json.
             **llm_override_kwargs: Optional keyword arguments to override specific settings within the chosen LLM configuration.
         """
-        chosen_llm_config_name = llm_config_name or \
-                                 HTML_ANALYZER_SETTINGS.get("default_llm_config_name", FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME)
+        if llm_config_name:
+            chosen_llm_config_name = llm_config_name
+        else:
+            chosen_llm_config_name = HTML_ANALYZER_SETTINGS.get("default_llm_config_name")
+
+        if not chosen_llm_config_name:
+            err_msg = "HTMLAnalyzer: LLM configuration name not provided. Please specify via argument or in agent_config.json."
+            print(f"CRITICAL: {err_msg}") # Use print for critical init errors if logger not set up
+            raise ValueError(err_msg)
         
-        print(f"HTMLAnalyzer: Using LLM configuration named: {chosen_llm_config_name}")
+        print(f"HTMLAnalyzer: Attempting to use LLM configuration named: {chosen_llm_config_name}")
 
         # Other HTMLAnalyzer specific settings from agent_config.json or fallbacks
         self.default_prompt_instruction = HTML_ANALYZER_SETTINGS.get("default_prompt_instruction", FALLBACK_HTML_ANALYZER_PROMPT)
@@ -101,16 +109,13 @@ class HTMLAnalyzer:
         # However, if agent_config.json specifies `stream_output` for html_analyzer, that implies an override intention for the chosen config.
         # The llm_override_kwargs can be used for this: e.g. HTMLAnalyzer(stream_config={'enabled': True})
 
-        # If agent_config.json has a specific stream_output for html_analyzer, pass it as an override
-        agent_stream_pref = HTML_ANALYZER_SETTINGS.get("stream_output")
+        # For now, we assume stream setting is primarily managed by the LLM configuration from llm_config.json
+        # The llm_override_kwargs can be used for this: e.g. HTMLAnalyzer(stream_config={'enabled': True})
+
         final_llm_kwargs = llm_override_kwargs.copy()
-        if agent_stream_pref is not None and "stream_config" not in final_llm_kwargs:
-            # Only apply if not already specified in direct overrides
-            # This sets the stream_config at the top level of overrides for LLMFactory
-            final_llm_kwargs["stream_config"] = StreamConfig(enabled=agent_stream_pref)
-        elif agent_stream_pref is not None and "stream_config" in final_llm_kwargs and isinstance(final_llm_kwargs["stream_config"], dict):
-            # If stream_config is already a dict in overrides, merge the enabled flag
-            final_llm_kwargs["stream_config"].setdefault("enabled", agent_stream_pref)
+        # Removed logic that used HTML_ANALYZER_SETTINGS.get("stream_output") to override stream_config.
+        # The LLM's streaming behavior will now be solely determined by its configuration in llm_config.json,
+        # unless explicitly overridden by llm_override_kwargs passed during HTMLAnalyzer instantiation.
 
         try:
             self.llm_client: BaseLLM = LLMFactory.create_from_config(
@@ -121,22 +126,14 @@ class HTMLAnalyzer:
             self.stream_output = self.llm_client.config.stream_config.enabled
             print(f"HTMLAnalyzer initialized. LLM: {self.llm_client.config.model_name}, Effective Stream: {self.stream_output}")
 
-        except ValueError as ve:
-            print(f"HTMLAnalyzer: Error creating LLM from config '{chosen_llm_config_name}': {ve}. Check llm_config.json and agent_config.json.")
-            # Fallback to direct creation with a known safe default
-            print(f"HTMLAnalyzer: Falling back to direct LLM creation with model '{FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME}' (or its underlying model if it's a config name). ")
-            try:
-                # Try to see if FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME is a config name itself
-                self.llm_client = LLMFactory.create_from_config(FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME, **final_llm_kwargs)
-            except ValueError:
-                 # If not a config name, assume it might be a raw model name (less ideal)
-                 print(f"HTMLAnalyzer: Fallback LLM config '{FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME}' not found. Attempting direct creation with it as model name.")
-                 self.llm_client = LLMFactory.create(model_name=FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME, stream=FALLBACK_HTML_ANALYZER_STREAM_OUTPUT, **final_llm_kwargs)
-            self.stream_output = self.llm_client.config.stream_config.enabled # Update stream status from fallback client
-            print(f"HTMLAnalyzer initialized with fallback LLM. Model: {self.llm_client.config.model_name}, Effective Stream: {self.stream_output}")
-        except Exception as e:
-            print(f"HTMLAnalyzer: Critical error during LLM client initialization: {e}")
-            raise # Re-raise critical errors
+        except ValueError as ve: # Raised by LLMFactory if config_name is not found
+            err_msg = f"HTMLAnalyzer: Error creating LLM from specified config '{chosen_llm_config_name}': {ve}. Ensure this configuration exists in llm_config.json."
+            print(f"CRITICAL: {err_msg}") # Use print for critical init errors
+            raise ValueError(err_msg) from ve # Re-raise with more context
+        except Exception as e: # Catch any other unexpected errors
+            err_msg = f"HTMLAnalyzer: Critical error during LLM client initialization with config '{chosen_llm_config_name}': {e}"
+            print(f"CRITICAL: {err_msg}")
+            raise Exception(err_msg) from e # Re-raise with more context
 
     def get_text_from_url(self, url: str) -> str | None:
         """

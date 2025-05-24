@@ -1,14 +1,15 @@
 {
   "html_analyzer": {
-    "default_llm_config_name": "default_qwen_streaming", 
-    "default_prompt_instruction": "Provide a concise summary of the following web content:",
-    "max_token_threshold": 2000,
+    "default_llm_config_name": "default_qwen_streaming",
+    "default_prompt_instruction": "Analyze this web content and summarize its key points.",
+    "max_token_threshold": 3000,
     "max_chars_llm_fallback": 15000,
-    "token_to_chars_ratio_heuristic": 1,
-    "stream_output": true 
+    "token_to_chars_ratio_heuristic": 1.5
   },
   "web_actions": {
-    "default_llm_config_name": "default_qwen_streaming", 
-    "max_interaction_retries": 3
+    "default_llm_config_name": "default_qwen_streaming",
+    "max_interaction_retries": 3,
+    "dom_max_elements": 120,
+    "dom_text_preview_length": 50
   }
 }

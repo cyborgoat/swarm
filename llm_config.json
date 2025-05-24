@@ -36,7 +36,7 @@
       "api_key": null,
       "base_url": null,
       "temperature": 0.75,
-      "max_tokens": 1500,
+      "max_tokens": 3000,
       "stream_config": {
         "enabled": true,
         "chunk_size": null,
@@ -64,6 +64,30 @@
       },
       "mcp_config": {
         "enabled": false
+      },
+      "extra_params": {}
+    },
+    "web_actions_openai_gpt4o": {
+      "model_name": "gpt-4o",
+      "api_key": null,
+      "base_url": null,
+      "temperature": 0.7,
+      "max_tokens": 2048,
+      "stream_config": {
+        "enabled": false,
+        "chunk_size": null,
+        "timeout": null
+      },
+      "reasoning_config": {
+        "show_thinking": false,
+        "max_thinking_tokens": null,
+        "reasoning_effort": null
+      },
+      "mcp_config": {
+        "enabled": false,
+        "server_url": null,
+        "tools": [],
+        "max_tokens": null
       },
       "extra_params": {}
     }
