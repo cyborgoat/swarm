@@ -17,11 +17,11 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from webdriver_manager.chrome import ChromeDriverManager
 
-from swarm.llm import LLMFactory, BaseLLM
+from swarm.llm import LLMFactory, BaseLLM, StreamConfig # Added StreamConfig for type hints
 
 # Configuration
-MAX_INTERACTION_RETRIES = 3
-DEFAULT_LLM_CONFIG_NAME_FOR_WEB_ACTIONS = "web_actions" # Default config name from config.json
+# MAX_INTERACTION_RETRIES = 3 # Will be loaded from agent_config.json
+# DEFAULT_LLM_CONFIG_NAME_FOR_WEB_ACTIONS = "web_actions" # Will be loaded from agent_config.json
 ENV_VAR_WEB_ACTIONS_LLM_CONFIG = "WEB_ACTIONS_LLM_CONFIG_NAME" # Env var to specify the config name
 
 # Setup logging
@@ -29,23 +29,52 @@ logger = logging.getLogger(__name__)
 # To see logs from this module, you can configure logging, e.g.:
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# --- Load Agent Configuration ---
+AGENT_CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent_config.json")
+
+def load_web_actions_specific_config() -> dict:
+    """Loads the 'web_actions' section from agent_config.json."""
+    try:
+        if os.path.exists(AGENT_CONFIG_FILE_PATH):
+            with open(AGENT_CONFIG_FILE_PATH, 'r') as f:
+                full_config = json.load(f)
+                web_actions_settings = full_config.get("web_actions", {})
+                if web_actions_settings:
+                    print(f"Loaded 'web_actions' settings from {AGENT_CONFIG_FILE_PATH}")
+                else:
+                    print(f"Warning: 'web_actions' section not found in {AGENT_CONFIG_FILE_PATH}. Using fallbacks.")
+                return web_actions_settings
+        else:
+            print(f"Warning: Agent configuration file not found at {AGENT_CONFIG_FILE_PATH}. Using fallbacks for WebActions.")
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from {AGENT_CONFIG_FILE_PATH}. Using fallbacks for WebActions.")
+    except Exception as e:
+        print(f"An error occurred while loading agent config for WebActions: {e}. Using fallbacks.")
+    return {} # Return empty dict on error, fallbacks will be used
+
+WEB_ACTIONS_SETTINGS = load_web_actions_specific_config()
+
+# --- Fallback values for WebActions if not in agent_config.json or section is incomplete ---
+FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME = "web_actions_openai_gpt4o" # Should match a config in llm_config.json
+FALLBACK_WEB_ACTIONS_MAX_RETRIES = 3
 
 class WebActions:
     """
     Manages Selenium WebDriver and LLM interaction for web automation.
     """
 
-    def __init__(self, llm_config_name: Optional[str] = None, headless: bool = True):
+    def __init__(self, llm_config_name: Optional[str] = None, headless: bool = True, **llm_override_kwargs):
         """
         Initializes the WebActions class.
 
         Args:
-            llm_config_name: The name of the LLM configuration (from config.json) to use.
-                             If None, uses WEB_ACTIONS_LLM_CONFIG_NAME env var, then a default.
+            llm_config_name: The name of the LLM configuration (from llm_config.json) to use.
+                             If None, uses WEB_ACTIONS_LLM_CONFIG_NAME env var, then default from agent_config.json.
             headless: Whether to run the browser in headless mode.
+            **llm_override_kwargs: Optional keyword arguments to override specific settings within the chosen LLM configuration.
         """
         logger.info("Initializing WebActions...")
-        self.driver: Optional[webdriver.Chrome] = None # Type hint for clarity
+        self.driver: Optional[webdriver.Chrome] = None
         try:
             options = webdriver.ChromeOptions()
             if headless:
@@ -67,30 +96,40 @@ class WebActions:
                 self.driver.quit()
             raise
 
-        # Determine LLM configuration
+        # Determine LLM configuration name
         chosen_llm_config_name = llm_config_name or \
                                  os.getenv(ENV_VAR_WEB_ACTIONS_LLM_CONFIG) or \
-                                 DEFAULT_LLM_CONFIG_NAME_FOR_WEB_ACTIONS
+                                 WEB_ACTIONS_SETTINGS.get("default_llm_config_name", FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME)
         
-        logger.info(f"Initializing LLM client with configuration: {chosen_llm_config_name}")
+        self.max_interaction_retries = WEB_ACTIONS_SETTINGS.get("max_interaction_retries", FALLBACK_WEB_ACTIONS_MAX_RETRIES)
+
+        logger.info(f"WebActions: Using LLM configuration: {chosen_llm_config_name}, Max Retries: {self.max_interaction_retries}")
+        
+        # Ensure that for action planning, streaming is disabled.
+        # We construct the override for stream_config.
+        planning_llm_overrides = llm_override_kwargs.copy()
+        planning_llm_overrides["stream_config"] = StreamConfig(enabled=False)
+
         try:
-            # LLMFactory will try to load config.json from a default path if not already loaded
-            # It will look for 'config.json' in the parent directory of the 'swarm' package.
-            self.llm_client: BaseLLM = LLMFactory.create_from_config(chosen_llm_config_name)
-            logger.info(f"LLM client created successfully using config: {chosen_llm_config_name}")
+            self.llm_client: BaseLLM = LLMFactory.create_from_config(
+                config_name=chosen_llm_config_name, 
+                **planning_llm_overrides # Pass merged overrides
+            )
+            logger.info(f"LLM client for WebActions created successfully using config: {chosen_llm_config_name} (streaming explicitly disabled for planning)")
         except ValueError as ve:
-            logger.error(f"Failed to create LLM from config '{chosen_llm_config_name}': {ve}", exc_info=True)
-            # Fallback to a direct creation with a known safe default if config loading fails catastrophically
-            # This is a last resort and indicates a setup issue with config.json or the factory.
-            logger.warning("Falling back to direct LLM creation with default parameters (gpt-4o). Check config.json and LLMFactory setup.")
+            logger.error(f"WebActions: Failed to create LLM from config '{chosen_llm_config_name}': {ve}", exc_info=True)
+            logger.warning(f"WebActions: Falling back to LLM config '{FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME}' (streaming explicitly disabled for planning).")
             try:
-                self.llm_client: BaseLLM = LLMFactory.create(model_name="gpt-4o", temperature=0.5, max_tokens=2000)
-            except Exception as e:
-                logger.error(f"Critical error: Fallback LLM creation also failed: {e}", exc_info=True)
-                self.close() # Close webdriver if open
-                raise # Re-raise the critical error
+                self.llm_client: BaseLLM = LLMFactory.create_from_config(
+                    config_name=FALLBACK_WEB_ACTIONS_LLM_CONFIG_NAME, 
+                    **planning_llm_overrides # Apply same stream override to fallback
+                )
+            except Exception as fallback_e:
+                logger.critical(f"WebActions: Critical error: Fallback LLM creation also failed: {fallback_e}", exc_info=True)
+                self.close()
+                raise
         except Exception as e:
-            logger.error(f"An unexpected error occurred during LLM client initialization: {e}", exc_info=True)
+            logger.critical(f"WebActions: An unexpected error occurred during LLM client initialization: {e}", exc_info=True)
             self.close()
             raise
             
@@ -452,13 +491,11 @@ class WebActions:
         """Starts an interactive loop for web actions."""
         if not self.driver: logger.critical("WebDriver not initialized. Cannot start interaction."); return
         
-        # Configure logging for the interactive session if not already done by user
-        if not logging.getLogger().hasHandlers(): # Check if root logger has handlers
+        if not logging.getLogger().hasHandlers():
             logging.basicConfig(level=logging.INFO, 
                                 format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                                 datefmt='%Y-%m-%d %H:%M:%S')
             logger.info("Basic logging configured for interactive session.")
-
 
         logger.info("\nWelcome to WebActions! (Type 'quit' to exit)")
 
@@ -483,11 +520,9 @@ class WebActions:
                 if intention.lower() == 'forward': self.driver.forward(); logger.info("Navigated forward."); continue
                 if not intention: logger.info("No intention provided, try again."); continue
 
-
                 dom_before_action = self.get_simplified_dom()
                 if "No interactive elements" in dom_before_action and not self.driver.page_source.strip():
                     logger.warning("Page appears to be empty or not loaded correctly.")
-                    # Maybe ask user to try navigating again or check URL
                     continue
 
                 actions = self.plan_actions_with_llm(intention, dom_before_action)
@@ -495,13 +530,13 @@ class WebActions:
                 if actions:
                     logger.info(f"LLM planned actions: {actions}")
                     self.execute_actions(actions)
-                    retries = 0 # Reset retries on successful planning
+                    retries = 0 
                 else:
                     logger.warning("LLM could not plan actions or planning failed.")
                     retries += 1
-                    if retries >= MAX_INTERACTION_RETRIES:
-                        logger.error(f"Max retries ({MAX_INTERACTION_RETRIES}) reached for intention: {intention}. Please try a different approach or check the page.")
-                        retries = 0 # Reset for next user intention
+                    if retries >= self.max_interaction_retries: # Use instance variable
+                        logger.error(f"Max retries ({self.max_interaction_retries}) reached for intention: {intention}. Please try a different approach or check the page.")
+                        retries = 0 
                 
                 time.sleep(1) 
 

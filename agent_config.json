@@ -1,0 +1,14 @@
+{
+  "html_analyzer": {
+    "default_llm_config_name": "default_qwen_streaming", 
+    "default_prompt_instruction": "Provide a concise summary of the following web content:",
+    "max_token_threshold": 2000,
+    "max_chars_llm_fallback": 15000,
+    "token_to_chars_ratio_heuristic": 1,
+    "stream_output": true 
+  },
+  "web_actions": {
+    "default_llm_config_name": "default_qwen_streaming", 
+    "max_interaction_retries": 3
+  }
+}

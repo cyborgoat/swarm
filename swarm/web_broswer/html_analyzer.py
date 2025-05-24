@@ -9,15 +9,27 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import json # For loading config.json
-from typing import Iterator # Import Iterator
+from typing import Iterator, Optional # Added Optional
 
 # Import LLMFactory from the swarm.llm module
-from swarm.llm import LLMFactory, BaseLLM
+from swarm.llm import LLMFactory, BaseLLM, StreamConfig # Imported StreamConfig
 
 # Define the path to the config file, assuming it's in the project root
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "config.json")
 DEFAULT_MODEL = "qwen-turbo" # Fallback if config.json or specific entry is missing
 DEFAULT_PROMPT_INSTRUCTION = "Analyze the following web content and tell me what it's about and its key points:"
+
+# Define the path to the agent_config.json file
+AGENT_CONFIG_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "agent_config.json")
+
+# --- Default values for HTMLAnalyzer if not found in agent_config.json ---
+# These are fallback values if agent_config.json is missing or html_analyzer section is incomplete.
+FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME = "default_qwen_streaming" # Fallback LLM config name
+FALLBACK_HTML_ANALYZER_PROMPT = "Analyze the following web content and tell me what it's about and its key points:"
+FALLBACK_HTML_ANALYZER_MAX_TOKEN_THRESHOLD = 2000
+FALLBACK_HTML_ANALYZER_MAX_CHARS_LLM_FALLBACK = 15000
+FALLBACK_HTML_ANALYZER_TOKEN_TO_CHARS_RATIO = 1
+FALLBACK_HTML_ANALYZER_STREAM_OUTPUT = False # Default for streaming if not in config
 
 def load_config() -> dict:
     """Loads configuration from config.json."""
@@ -43,35 +55,88 @@ DEFAULT_MAX_CHARS_LLM_FALLBACK = 15000
 DEFAULT_TOKEN_TO_CHARS_RATIO = 1 # Heuristic: 1 token ~ 1 char (conservative, adjust as needed)
 DEFAULT_STREAM_OUTPUT = False
 
+def load_agent_config() -> dict:
+    """Loads agent configuration from agent_config.json."""
+    try:
+        if os.path.exists(AGENT_CONFIG_FILE_PATH):
+            with open(AGENT_CONFIG_FILE_PATH, 'r') as f:
+                config_data = json.load(f)
+                print(f"Loaded agent configuration from {AGENT_CONFIG_FILE_PATH}")
+                return config_data
+        else:
+            print(f"Warning: Agent configuration file not found at {AGENT_CONFIG_FILE_PATH}. Using fallbacks.")
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from {AGENT_CONFIG_FILE_PATH}. Using fallbacks.")
+    except Exception as e:
+        print(f"An error occurred while loading agent config: {e}. Using fallbacks.")
+    return {} # Return empty dict on error, fallbacks will be used
+
+AGENT_SETTINGS = load_agent_config()
+HTML_ANALYZER_SETTINGS = AGENT_SETTINGS.get("html_analyzer", {})
+
 class HTMLAnalyzer:
     """Analyzes HTML content from a URL using an LLM."""
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None):
+    def __init__(self, llm_config_name: Optional[str] = None, **llm_override_kwargs):
         """
         Initializes the HTMLAnalyzer.
 
         Args:
-            model_name: Optional. The LLM model to use.
-                        If None, tries to load from config.json, then uses a default.
-            api_key: Optional API key. If None, LLMFactory will try to read from env variables
-                     or potentially from the config.json if LLMFactory is extended to do so.
+            llm_config_name: Optional. The name of the LLM configuration (from llm_config.json) to use.
+                             If None, uses the default from agent_config.json, then a hardcoded fallback.
+            **llm_override_kwargs: Optional keyword arguments to override specific settings within the chosen LLM configuration.
         """
-        chosen_model_name = model_name
-        if chosen_model_name is None:
-            chosen_model_name = APP_CONFIG.get("html_analyzer_default_model", DEFAULT_MODEL)
-            print(f"No model_name provided, using from config/default: {chosen_model_name}")
-        else:
-            print(f"Using provided model_name: {chosen_model_name}")
+        chosen_llm_config_name = llm_config_name or \
+                                 HTML_ANALYZER_SETTINGS.get("default_llm_config_name", FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME)
+        
+        print(f"HTMLAnalyzer: Using LLM configuration named: {chosen_llm_config_name}")
 
-        self.stream_output = APP_CONFIG.get("html_analyzer_stream_output", DEFAULT_STREAM_OUTPUT)
-        print(f"HTMLAnalyzer configured to stream output: {self.stream_output}")
+        # Other HTMLAnalyzer specific settings from agent_config.json or fallbacks
+        self.default_prompt_instruction = HTML_ANALYZER_SETTINGS.get("default_prompt_instruction", FALLBACK_HTML_ANALYZER_PROMPT)
+        self.max_token_threshold = HTML_ANALYZER_SETTINGS.get("max_token_threshold", FALLBACK_HTML_ANALYZER_MAX_TOKEN_THRESHOLD)
+        self.max_chars_llm_fallback = HTML_ANALYZER_SETTINGS.get("max_chars_llm_fallback", FALLBACK_HTML_ANALYZER_MAX_CHARS_LLM_FALLBACK)
+        self.token_to_chars_ratio_heuristic = HTML_ANALYZER_SETTINGS.get("token_to_chars_ratio_heuristic", FALLBACK_HTML_ANALYZER_TOKEN_TO_CHARS_RATIO)
+        # Stream preference can be part of the LLM config itself, but can also be an agent-level override if needed.
+        # For now, we assume stream setting is primarily managed by the LLM configuration from llm_config.json
+        # However, if agent_config.json specifies `stream_output` for html_analyzer, that implies an override intention for the chosen config.
+        # The llm_override_kwargs can be used for this: e.g. HTMLAnalyzer(stream_config={'enabled': True})
 
-        self.llm_client: BaseLLM = LLMFactory.create(
-            model_name=chosen_model_name,
-            api_key=api_key, # LLMFactory handles env var lookup
-            stream=self.stream_output # Pass stream preference to factory
-        )
-        print(f"HTMLAnalyzer initialized with model: {self.llm_client.config.model_name}, Stream: {self.llm_client.config.stream_config.enabled}")
+        # If agent_config.json has a specific stream_output for html_analyzer, pass it as an override
+        agent_stream_pref = HTML_ANALYZER_SETTINGS.get("stream_output")
+        final_llm_kwargs = llm_override_kwargs.copy()
+        if agent_stream_pref is not None and "stream_config" not in final_llm_kwargs:
+            # Only apply if not already specified in direct overrides
+            # This sets the stream_config at the top level of overrides for LLMFactory
+            final_llm_kwargs["stream_config"] = StreamConfig(enabled=agent_stream_pref)
+        elif agent_stream_pref is not None and "stream_config" in final_llm_kwargs and isinstance(final_llm_kwargs["stream_config"], dict):
+            # If stream_config is already a dict in overrides, merge the enabled flag
+            final_llm_kwargs["stream_config"].setdefault("enabled", agent_stream_pref)
+
+        try:
+            self.llm_client: BaseLLM = LLMFactory.create_from_config(
+                config_name=chosen_llm_config_name,
+                **final_llm_kwargs # Pass overrides here
+            )
+            # The actual stream setting will be from the LLM's config after factory processing
+            self.stream_output = self.llm_client.config.stream_config.enabled
+            print(f"HTMLAnalyzer initialized. LLM: {self.llm_client.config.model_name}, Effective Stream: {self.stream_output}")
+
+        except ValueError as ve:
+            print(f"HTMLAnalyzer: Error creating LLM from config '{chosen_llm_config_name}': {ve}. Check llm_config.json and agent_config.json.")
+            # Fallback to direct creation with a known safe default
+            print(f"HTMLAnalyzer: Falling back to direct LLM creation with model '{FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME}' (or its underlying model if it's a config name). ")
+            try:
+                # Try to see if FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME is a config name itself
+                self.llm_client = LLMFactory.create_from_config(FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME, **final_llm_kwargs)
+            except ValueError:
+                 # If not a config name, assume it might be a raw model name (less ideal)
+                 print(f"HTMLAnalyzer: Fallback LLM config '{FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME}' not found. Attempting direct creation with it as model name.")
+                 self.llm_client = LLMFactory.create(model_name=FALLBACK_HTML_ANALYZER_LLM_CONFIG_NAME, stream=FALLBACK_HTML_ANALYZER_STREAM_OUTPUT, **final_llm_kwargs)
+            self.stream_output = self.llm_client.config.stream_config.enabled # Update stream status from fallback client
+            print(f"HTMLAnalyzer initialized with fallback LLM. Model: {self.llm_client.config.model_name}, Effective Stream: {self.stream_output}")
+        except Exception as e:
+            print(f"HTMLAnalyzer: Critical error during LLM client initialization: {e}")
+            raise # Re-raise critical errors
 
     def get_text_from_url(self, url: str) -> str | None:
         """
@@ -130,14 +195,14 @@ class HTMLAnalyzer:
             print(f"An unexpected error occurred during text extraction: {e}")
             return None
 
-    def analyze_text_content(self, text_content: str, prompt_instruction: str | None = None) -> str | None | Iterator[str]:
+    def analyze_text_content(self, text_content: str, prompt_instruction: Optional[str] = None) -> str | None | Iterator[str]:
         """
         Sends text content to the configured LLM for processing.
 
         Args:
             text_content: The text to be processed.
             prompt_instruction: Optional specific instruction for the LLM (e.g., "Summarize this text").
-                                If None, a default analysis prompt is used.
+                                If None, a default analysis prompt from agent_config is used.
 
         Returns:
             The processed text (e.g., summary or analysis) from LLM.
@@ -148,64 +213,59 @@ class HTMLAnalyzer:
             print("Error: LLM client not initialized.")
             return None
 
-        if prompt_instruction is None:
-            prompt_instruction = "Analyze the following web content and tell me what it's about and its key points:"
+        final_prompt_instruction = prompt_instruction or self.default_prompt_instruction
 
-        # Load configurations for token/char limits
-        max_token_threshold = APP_CONFIG.get("html_analyzer_max_token_threshold", DEFAULT_MAX_TOKEN_THRESHOLD)
-        max_chars_llm_fallback = APP_CONFIG.get("html_analyzer_max_chars_llm_fallback", DEFAULT_MAX_CHARS_LLM_FALLBACK)
-        # Heuristic: Ratio to convert model's max_tokens to a character limit for input.
-        token_to_chars_ratio = APP_CONFIG.get("html_analyzer_token_to_chars_ratio_heuristic", DEFAULT_TOKEN_TO_CHARS_RATIO)
+        # Use configured limits
+        max_token_threshold = self.max_token_threshold
+        max_chars_llm_fallback = self.max_chars_llm_fallback
+        token_to_chars_ratio = self.token_to_chars_ratio_heuristic
 
-
-        # Determine the maximum characters for LLM input based on model's configured max_tokens
         llm_configured_max_tokens = self.llm_client.config.max_tokens
         if llm_configured_max_tokens is not None and llm_configured_max_tokens > max_token_threshold:
-            # If model's max_tokens is significant, use it with a ratio for a char limit.
             max_chars_llm = int(llm_configured_max_tokens * token_to_chars_ratio)
         else:
-            # Fallback if model's max_tokens is not set, too small, or below threshold.
             max_chars_llm = max_chars_llm_fallback
 
-        # Basic truncation if text_content + prompt_instruction exceeds calculated max_chars_llm
-        # TODO: Implement more sophisticated text splitting/chunking for very large content.
-        if len(text_content) + len(prompt_instruction) > max_chars_llm:
-            available_chars = max_chars_llm - len(prompt_instruction) - 200 # Buffer for prompt structure & safety
-            if available_chars < 100: # Ensure reasonable truncation
-                print(f"Error: Prompt instruction is too long ({len(prompt_instruction)}) for max_chars_llm ({max_chars_llm}).")
+        if len(text_content) + len(final_prompt_instruction) > max_chars_llm:
+            available_chars = max_chars_llm - len(final_prompt_instruction) - 200 
+            if available_chars < 100: 
+                print(f"Error: Prompt instruction is too long ({len(final_prompt_instruction)}) for max_chars_llm ({max_chars_llm}).")
                 return None
-            print(f"Warning: Content too long, truncating to fit ~{available_chars} chars for LLM input.")
+            print(f"Warning: Content too long ({len(text_content)} chars), truncating to fit ~{available_chars} chars for LLM input.")
             text_content = text_content[:available_chars]
 
         messages = [
             {'role': 'system', 'content': 'You are an AI assistant skilled at understanding and processing web content.'},
-            {'role': 'user', 'content': f"{prompt_instruction}\n\n---\n\n{text_content}\n\n---\n\nAnalysis:"}
+            {'role': 'user', 'content': f"{final_prompt_instruction}\n\n---\n\n{text_content}\n\n---\n\nAnalysis:"}
         ]
 
-        print(f"Sending content to LLM: {self.llm_client.config.model_name}...")
+        print(f"HTMLAnalyzer: Sending content to LLM: {self.llm_client.config.model_name} (Stream: {self.stream_output})...")
         try:
-            response_generator = self.llm_client.generate(messages=messages) # generate should handle stream internally
+            # LLMFactory's create_from_config would have set up the LLMConfig with stream settings.
+            # The generate method of the client should respect this config.
+            response = self.llm_client.generate(messages=messages)
 
             if self.stream_output:
-                print("Streaming response from LLM...")
-                # Ensure the generator is not None before trying to iterate
-                if response_generator is None:
+                # print("HTMLAnalyzer: Streaming response from LLM...")
+                if response is None:
                     print("Error: LLM returned None when expecting a stream.")
                     return None
-                def stream_handler():
-                    for chunk in response_generator:
-                        yield chunk
-                return stream_handler()
+                # Ensure it's an iterator, not a string if stream_output is true
+                if isinstance(response, str):
+                    print("Error: LLM returned a string but stream_output is True. Check LLM client stream handling.")
+                    # As a fallback, yield the string as a single chunk
+                    def single_chunk_stream(): yield response
+                    return single_chunk_stream()
+                return response # Expected to be an iterator
             else:
-                # Non-streaming: response_generator is expected to be the full string or None
-                if response_generator:
-                    print("Successfully received non-streaming response from LLM.")
-                    return str(response_generator) # Ensure it's a string
+                if response:
+                    # print("HTMLAnalyzer: Successfully received non-streaming response from LLM.")
+                    return str(response) 
                 else:
                     print("Error: LLM returned an empty or None response for non-streaming.")
                     return None
         except Exception as e:
-            print(f"An exception occurred while calling the LLM: {e}")
+            print(f"HTMLAnalyzer: An exception occurred while calling the LLM: {e}")
             return None
 
     def get_and_analyze_url(self, url: str, prompt_instruction: str | None = None) -> str | None | Iterator[str]:

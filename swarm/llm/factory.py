@@ -64,36 +64,35 @@ class LLMFactory:
     
     @classmethod
     def _load_json_config(cls, config_path: Optional[str] = None) -> None:
-        """Loads configurations from the specified JSON file or default 'config.json'."""
+        """Loads configurations from the specified JSON file or default 'llm_config.json'."""
         if cls._config_data is not None: # Already loaded
             return
 
         if config_path is None:
-            # Try to find config.json in the project root (assuming factory.py is in swarm/llm)
             current_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
-            default_config_path = os.path.join(project_root, "config.json")
+            default_config_path = os.path.join(project_root, "llm_config.json")
             config_path = default_config_path
 
         try:
-            print(f"LLMFactory: Loading configuration from {config_path}")
+            print(f"LLMFactory: Loading LLM configuration from {config_path}")
             with open(config_path, 'r') as f:
                 cls._config_data = json.load(f)
             
             cls._llm_configurations = cls._config_data.get("llm_configurations", {})
             cls._api_keys_from_config = cls._config_data.get("api_keys", {})
             if not cls._llm_configurations:
-                 print("LLMFactory: 'llm_configurations' not found or empty in config.json.")
+                 print("LLMFactory: 'llm_configurations' not found or empty in llm_config.json.")
             if not cls._api_keys_from_config:
-                 print("LLMFactory: 'api_keys' not found or empty in config.json.")
+                 print("LLMFactory: 'api_keys' not found or empty in llm_config.json.")
 
         except FileNotFoundError:
-            print(f"LLMFactory: Configuration file {config_path} not found. Using defaults and environment variables.")
+            print(f"LLMFactory: LLM configuration file {config_path} not found. Using defaults and environment variables.")
             cls._config_data = {}
             cls._llm_configurations = {}
             cls._api_keys_from_config = {}
         except json.JSONDecodeError:
-            print(f"LLMFactory: Error decoding JSON from {config_path}. Using defaults.")
+            print(f"LLMFactory: Error decoding JSON from LLM configuration file {config_path}. Using defaults.")
             cls._config_data = {}
             cls._llm_configurations = {}
             cls._api_keys_from_config = {}
@@ -174,30 +173,47 @@ class LLMFactory:
         **override_kwargs
     ) -> BaseLLM:
         """
-        Creates an LLM client based on a named configuration from config.json.
+        Creates an LLM client based on a named configuration from llm_config.json.
         Overrides from kwargs take precedence.
         """
         cls._load_json_config(config_path)
 
         if not cls._llm_configurations:
-            raise ValueError("LLMFactory: No LLM configurations loaded. Check config.json.")
+            raise ValueError("LLMFactory: No LLM configurations loaded. Check llm_config.json.")
         
         base_config_dict = cls._llm_configurations.get(config_name)
         if not base_config_dict:
-            raise ValueError(f"LLMFactory: Configuration '{config_name}' not found in config.json.")
+            raise ValueError(f"LLMFactory: Configuration '{config_name}' not found in llm_config.json.")
 
         # Create a mutable copy and override with kwargs
         effective_config_dict = base_config_dict.copy()
         effective_config_dict.update(override_kwargs)
         
         # Extract nested config objects or use defaults
-        sc_dict = effective_config_dict.pop("stream_config", {})
-        rc_dict = effective_config_dict.pop("reasoning_config", {})
-        mc_dict = effective_config_dict.pop("mcp_config", {})
+        # Handle cases where the override might be a dict or already a config object
+        stream_config_val = effective_config_dict.pop("stream_config", {})
+        if isinstance(stream_config_val, StreamConfig):
+            stream_config = stream_config_val
+        elif isinstance(stream_config_val, dict):
+            stream_config = StreamConfig(**stream_config_val)
+        else:
+            stream_config = StreamConfig() # Default
 
-        stream_config = StreamConfig(**sc_dict) if isinstance(sc_dict, dict) else StreamConfig()
-        reasoning_config = ReasoningConfig(**rc_dict) if isinstance(rc_dict, dict) else ReasoningConfig()
-        mcp_config = MCPConfig(**mc_dict) if isinstance(mc_dict, dict) else MCPConfig()
+        reasoning_config_val = effective_config_dict.pop("reasoning_config", {})
+        if isinstance(reasoning_config_val, ReasoningConfig):
+            reasoning_config = reasoning_config_val
+        elif isinstance(reasoning_config_val, dict):
+            reasoning_config = ReasoningConfig(**reasoning_config_val)
+        else:
+            reasoning_config = ReasoningConfig() # Default
+
+        mcp_config_val = effective_config_dict.pop("mcp_config", {})
+        if isinstance(mcp_config_val, MCPConfig):
+            mcp_config = mcp_config_val
+        elif isinstance(mcp_config_val, dict):
+            mcp_config = MCPConfig(**mcp_config_val)
+        else:
+            mcp_config = MCPConfig() # Default
 
         # Resolve API key
         model_name = effective_config_dict.get("model_name")
