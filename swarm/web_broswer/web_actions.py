@@ -7,7 +7,7 @@ attempt to perform actions on the webpage using Selenium.
 import os
 import json
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterator
 import logging # Added for more structured logging
 
 from selenium import webdriver
@@ -18,6 +18,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 from webdriver_manager.chrome import ChromeDriverManager
 
 from swarm.llm import LLMFactory, BaseLLM, StreamConfig # Added StreamConfig for type hints
+from .html_analyzer import HTMLAnalyzer # Import HTMLAnalyzer
 
 # Configuration
 # MAX_INTERACTION_RETRIES = 3 # Will be loaded from agent_config.json
@@ -133,6 +134,18 @@ class WebActions:
             self.close()
             raise
             
+        # Initialize HTMLAnalyzer
+        # HTMLAnalyzer will load its own configuration from agent_config.json
+        try:
+            logger.info("WebActions: Initializing internal HTMLAnalyzer...")
+            self.html_analyzer = HTMLAnalyzer() 
+            # HTMLAnalyzer's __init__ prints its chosen LLM config name and effective stream settings.
+            logger.info("WebActions: Internal HTMLAnalyzer initialized successfully.")
+        except Exception as e_analyzer:
+            logger.error(f"WebActions: Failed to initialize internal HTMLAnalyzer: {e_analyzer}", exc_info=True)
+            logger.warning("WebActions: HTMLAnalyzer could not be initialized. Content analysis capabilities will be unavailable.")
+            self.html_analyzer = None # Set to None if initialization fails
+
         logger.info("WebActions initialized.")
 
     def open_url(self, url: str):
@@ -244,25 +257,25 @@ class WebActions:
         """
         prompt_parts = [
             "You are an expert web automation assistant. Based on the provided simplified DOM and the user's intention, ",
-            "determine a sequence of Selenium actions to achieve the goal. Focus on using the 'ref' attribute of elements.",
-            "Prioritize elements like inputs, buttons, and links that are clearly identifiable by their 'ref'.",
-            "If multiple elements seem relevant, choose the one with the most specific 'ref' (e.g., with id or name).",
+            "determine a sequence of actions to achieve the goal. Focus on using the 'ref' attribute of elements for interactions.",
             "Available actions:",
             "1. type(ref, text): Type text into an input field, textarea, or select.",
-            "   - ref: The 'ref' attribute of the element from the DOM (e.g., 'input_id#user_login').",
+            "   - ref: The 'ref' attribute of the element from the DOM.",
             "   - text: The text to type.",
             "2. click(ref): Click on a button, link, or other clickable element.",
             "   - ref: The 'ref' attribute of the element from the DOM.",
-            "3. navigate(url): Navigate to a new URL. Use this if the intention is to go to a new page not linked in the current DOM.",
+            "3. navigate(url): Navigate to a new URL.",
             "   - url: The full URL to navigate to.",
             "4. wait(seconds): Wait for a specified number of seconds (e.g., for dynamic content to load). Max 5 seconds.",
             "   - seconds: Number of seconds to wait.",
+            "5. analyze_page_content(question_for_analyzer): Use this if the user is asking a question about the content of the current page itself (e.g., 'Summarize this page', 'What is the main topic?', 'Find information about X on this page').",
+            "   - question_for_analyzer: The specific question or analysis task based on the user's intention.",
             "Current Page URL (for context): " + (self.driver.current_url if self.driver else "Unknown"),
             f"Simplified DOM:\n---\n{dom_info}\n---",
             f'User Intention: "{user_intention}"',
             "Output the actions as a JSON list of dictionaries. Each dictionary must have an \"action_type\" ",
-            "(e.g., \"type\", \"click\", \"navigate\", \"wait\"), and other necessary parameters based on the action_type ",
-            "(e.g., \"ref\", \"text\", \"url\", \"seconds\"). ",
+            "(e.g., \"type\", \"click\", \"navigate\", \"wait\", \"analyze_page_content\"), and other necessary parameters based on the action_type ",
+            "(e.g., \"ref\", \"text\", \"url\", \"seconds\", \"question_for_analyzer\"). ",
             "Ensure the output is ONLY the JSON list, starting with [ and ending with ].",
             "Example for typing and clicking:",
             "```json",
@@ -281,6 +294,12 @@ class WebActions:
             "```json",
             "[",
             "  {\"action_type\": \"wait\", \"seconds\": 3}",
+            "]",
+            "```",
+            "Example for page content analysis:",
+            "```json",
+            "[",
+            "  {\"action_type\": \"analyze_page_content\", \"question_for_analyzer\": \"What are the main services offered on this page?\"}",
             "]",
             "```",
             "If the intention cannot be achieved with the available elements/actions, or if the DOM is empty, output an empty list [].",
@@ -476,6 +495,42 @@ class WebActions:
                         logger.warning(f"Invalid or missing 'seconds' for wait action: {seconds}. Waiting 1s by default.")
                         time.sleep(1)
 
+                elif action_type == "analyze_page_content":
+                    question = action_dict.get("question_for_analyzer")
+                    if not question:
+                        logger.warning("Skipping 'analyze_page_content' action: 'question_for_analyzer' not provided.")
+                        continue
+                    if not self.html_analyzer:
+                        logger.error("HTMLAnalyzer not available. Cannot execute 'analyze_page_content'.")
+                        print("SYSTEM: Sorry, I cannot analyze the page content right now as the analyzer module is not working.")
+                        continue
+                    
+                    current_page_url = self.driver.current_url # Still useful for logging/context
+                    page_html_content = self.driver.page_source
+
+                    if not page_html_content:
+                        logger.warning("Could not get page source from the browser. Cannot analyze content.")
+                        print("SYSTEM: Could not retrieve current page content for analysis.")
+                        continue
+
+                    logger.info(f"Using HTMLAnalyzer to process content from current page: '{current_page_url}' with question: '{question}'")
+                    print(f"SYSTEM: Analyzing current page content with HTMLAnalyzer for: \"{question}\" (this may take a moment)...")
+                    
+                    analysis_result = self.html_analyzer.analyze_html_content(page_html_content, prompt_instruction=question)
+                    
+                    print("\n--- HTMLAnalyzer Response ---")
+                    if hasattr(analysis_result, '__iter__') and not isinstance(analysis_result, str):
+                        for chunk in analysis_result: # type: ignore
+                            print(chunk, end="", flush=True)
+                        print("\n-----------------------------\n")
+                    elif analysis_result:
+                        print(str(analysis_result))
+                        print("-----------------------------\n")
+                    else:
+                        print("HTMLAnalyzer returned no information or an error occurred.")
+                        logger.warning("HTMLAnalyzer returned no information or an error for 'analyze_page_content'.")
+                    # No further browser actions usually follow a page analysis in the same step.
+                    # The user will see the analysis and can then issue a new command.
 
                 else:
                     logger.warning(f"Unknown action type: {action_type}")

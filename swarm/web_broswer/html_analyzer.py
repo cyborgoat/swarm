@@ -195,6 +195,56 @@ class HTMLAnalyzer:
             print(f"An unexpected error occurred during text extraction: {e}")
             return None
 
+    def analyze_html_content(self, html_content: str, prompt_instruction: Optional[str] = None) -> str | None | Iterator[str]:
+        """
+        Parses provided HTML content, extracts clean text, and then sends it to the LLM for processing.
+        This method is intended for use when HTML content is already available (e.g., from Selenium).
+
+        Args:
+            html_content: The raw HTML content string.
+            prompt_instruction: Optional specific instruction for the LLM.
+
+        Returns:
+            The LLM's analysis of the webpage content.
+            If streaming is enabled, returns an iterator yielding text chunks.
+            Returns None if an error occurs or no text is extracted.
+        """
+        if not html_content:
+            print("HTMLAnalyzer.analyze_html_content: Error - No HTML content provided.")
+            return None
+
+        print("HTMLAnalyzer.analyze_html_content: Parsing provided HTML content...")
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # Same decomposition logic as in get_text_from_url
+            for element_type in ["script", "style", "nav", "footer", "aside", "header", "form", "img", "svg"]:
+                for element in soup.find_all(element_type):
+                    element.decompose()
+
+            main_content = soup.find('main') or \
+                           soup.find('article') or \
+                           soup.find(class_='content') or \
+                           soup.find(id='content')
+
+            if main_content:
+                text = main_content.get_text(separator=' ', strip=True)
+            else:
+                text = soup.get_text(separator=' ', strip=True)
+
+            text = ' '.join(text.split())
+            text = '\n'.join([line.strip() for line in text.splitlines() if line.strip()])
+
+            if not text:
+                print("HTMLAnalyzer.analyze_html_content: Warning - No text could be extracted from the provided HTML.")
+                return None
+
+            print(f"HTMLAnalyzer.analyze_html_content: Successfully extracted {len(text)} characters from provided HTML.")
+            return self.analyze_text_content(text, prompt_instruction)
+        except Exception as e:
+            print(f"HTMLAnalyzer.analyze_html_content: An unexpected error occurred during HTML parsing or text extraction: {e}")
+            return None
+
     def analyze_text_content(self, text_content: str, prompt_instruction: Optional[str] = None) -> str | None | Iterator[str]:
         """
         Sends text content to the configured LLM for processing.
@@ -213,7 +263,8 @@ class HTMLAnalyzer:
             print("Error: LLM client not initialized.")
             return None
 
-        final_prompt_instruction = prompt_instruction or self.default_prompt_instruction
+        # Determine which instruction is active for length calculation and for the prompt logic
+        active_instruction = prompt_instruction if prompt_instruction else self.default_prompt_instruction
 
         # Use configured limits
         max_token_threshold = self.max_token_threshold
@@ -221,22 +272,54 @@ class HTMLAnalyzer:
         token_to_chars_ratio = self.token_to_chars_ratio_heuristic
 
         llm_configured_max_tokens = self.llm_client.config.max_tokens
-        if llm_configured_max_tokens is not None and llm_configured_max_tokens > max_token_threshold:
-            max_chars_llm = int(llm_configured_max_tokens * token_to_chars_ratio)
-        else:
-            max_chars_llm = max_chars_llm_fallback
+        # Prefer LLM's configured max_tokens if it's higher than agent's threshold, but still respect agent's threshold as a cap
+        if llm_configured_max_tokens is not None and llm_configured_max_tokens > 0: # Ensure it's a positive number
+            # Effective max tokens for the LLM call, considering both its own limit and the agent's general threshold
+            # We want to use the smaller of the LLM's capacity or a potentially larger threshold if agent allows more
+            # Actually, max_token_threshold is the agent's desired cap for *this* task, not a general LLM cap override.
+            # So, we should use the agent's max_token_threshold to calculate max_chars_llm, and the LLM will respect its own internal max_tokens if it's smaller.
+            # The primary goal here is to not send *too much* text to the LLM based on agent settings.
+            pass # max_token_threshold from agent config is the one we use for char calculation.
+        
+        # Calculate max characters for LLM input based on the agent's token threshold setting for this task
+        max_chars_llm = int(max_token_threshold * token_to_chars_ratio) 
+        # If the LLM itself has a smaller max_tokens that would result in fewer chars, that's handled by the LLM client or API.
+        # This calculation is primarily for *our* truncation before sending.
 
-        if len(text_content) + len(final_prompt_instruction) > max_chars_llm:
-            available_chars = max_chars_llm - len(final_prompt_instruction) - 200 
-            if available_chars < 100: 
-                print(f"Error: Prompt instruction is too long ({len(final_prompt_instruction)}) for max_chars_llm ({max_chars_llm}).")
+        if len(text_content) + len(active_instruction) > max_chars_llm:
+            # Calculate available characters for text_content, reserving space for instruction and some buffer (e.g., for newlines, "Text:", "Question:")
+            # The buffer of 200 was arbitrary; let's make it more related to the prompt structure itself.
+            # Approximate length of prompt boilerplate (e.g., "Based on...Text:...Question:...Answer:")
+            boilerplate_char_estimate = 100 
+            available_chars = max_chars_llm - len(active_instruction) - boilerplate_char_estimate
+            if available_chars < 100: # If very little space left for actual content
+                print(f"Error: Prompt instruction ('{active_instruction[:50]}...', {len(active_instruction)} chars) is too long for configured max_chars_llm ({max_chars_llm}) with boilerplate.")
                 return None
-            print(f"Warning: Content too long ({len(text_content)} chars), truncating to fit ~{available_chars} chars for LLM input.")
+            print(f"Warning: Content too long ({len(text_content)} chars), truncating to fit ~{available_chars} chars for LLM input (instruction: {len(active_instruction)} chars, max_chars_llm: {max_chars_llm}).")
             text_content = text_content[:available_chars]
 
+        system_message = "You are an AI assistant skilled at understanding and processing web content. Your primary task is to answer specific questions based on the provided text. If a specific question is not provided, you should summarize the text or follow the given instruction."
+        
+        user_message_content = ""
+        if prompt_instruction: # A specific question or instruction was passed
+            user_message_content = (
+                f"Based on the following text, please answer the question or follow the instruction accurately and concisely.\n\n"
+                f"Text:\n{text_content}\n\n"
+                f"Question/Instruction: {prompt_instruction}\n\n"
+                f"Answer/Response:"
+            )
+        else: # No specific question, use default summarization/analysis prompt
+            user_message_content = (
+                f"{self.default_prompt_instruction}\n\n"
+                f"---\n\n"
+                f"{text_content}\n\n"
+                f"---\n\n"
+                f"Summary/Analysis:"
+            )
+
         messages = [
-            {'role': 'system', 'content': 'You are an AI assistant skilled at understanding and processing web content.'},
-            {'role': 'user', 'content': f"{final_prompt_instruction}\n\n---\n\n{text_content}\n\n---\n\nAnalysis:"}
+            {'role': 'system', 'content': system_message},
+            {'role': 'user', 'content': user_message_content}
         ]
 
         print(f"HTMLAnalyzer: Sending content to LLM: {self.llm_client.config.model_name} (Stream: {self.stream_output})...")
