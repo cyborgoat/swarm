@@ -1,22 +1,26 @@
 # Swarm
 
-A comprehensive platform for multi-LLM integration and canvas-like applications. Swarm provides a unified interface for working with multiple Large Language Model providers, supporting streaming, reasoning models, tool calling, multimodal inputs, and Model Context Protocol.
+A comprehensive platform for multi-LLM integration and agent-based web interaction. Swarm provides a unified interface for working with multiple Large Language Model providers and includes agents for web page analysis and interactive browser automation.
 
 ## Features
 
-### 🧠 LLM Module
-- **Multiple Providers**: OpenAI, Anthropic, Qwen, Gemini, DeepSeek
-- **Streaming Support**: Real-time response streaming for all providers
-- **Reasoning Models**: Special support for reasoning models (DeepSeek-R1, QwQ) with thinking display
-- **Tool Calling**: Function calling support across compatible models
-- **Multimodal**: Image and text input support (Gemini)
-- **Model Context Protocol**: Preparatory support for MCP integration
-- **Unified Interface**: Same API across all providers
-- **Easy Configuration**: Simple factory pattern for model instantiation
+### 🧠 LLM Module (`swarm.llm`)
+- **Multiple Providers**: OpenAI, Anthropic, Qwen, Gemini, DeepSeek.
+- **Unified Interface**: Consistent API (`generate`, `generate_with_tools`) across all providers.
+- **Configuration Driven**: Load LLM setups from `llm_config.json`, including API keys, model parameters, and specific endpoints.
+- **Streaming Support**: Real-time response streaming.
+- **Reasoning Models**: Support for models with explicit thinking/reasoning steps.
+- **Tool Calling**: Function calling capabilities.
+- **Multimodal**: Image and text input support (provider-dependent, e.g., Gemini).
 
-### 🎨 Canvas-like Application Platform
-- Extensible architecture for building interactive applications
-- Modular design for easy component integration
+### 🌐 Web Browser Module (`swarm.web_broswer`)
+- **`HTMLAnalyzer`**: Fetches web content, cleans HTML, and uses an LLM to analyze or summarize it. Configurable via `agent_config.json`.
+- **`WebActions`**: Integrates Selenium and an LLM for interactive web automation. Users specify intentions, and the LLM plans and executes actions (type, click, navigate) on web pages. Configurable via `agent_config.json`.
+
+### ⚙️ Configuration
+- **`llm_config.json`**: Centralized configuration for all LLM providers, including API keys and detailed model parameters for named configurations (e.g., "default_openai", "deepseek_coder_streaming").
+- **`agent_config.json`**: Configuration for agents like `HTMLAnalyzer` and `WebActions`, specifying which LLM configuration (by name from `llm_config.json`) to use, and other agent-specific settings.
+- **`.env.local`**: For storing sensitive API keys, which are then referenced by `llm_config.json` or directly by the LLM clients.
 
 ## Installation
 
@@ -27,45 +31,207 @@ This project uses [uv](https://github.com/astral-sh/uv) for dependency managemen
 git clone <repository-url>
 cd swarm
 
-# Install dependencies with uv
+# Install core dependencies
 uv pip install -e .
 
-# For development
+# Install development dependencies (for linting, testing, etc.)
 uv pip install -e ".[dev]"
 ```
 
+## Configuration Setup
+
+1.  **Copy `.env.sample` to `.env.local`**:
+    ```bash
+    cp .env.sample .env.local
+    ```
+    Edit `.env.local` to add your actual API keys for the LLM providers you intend to use.
+
+2.  **Review `llm_config.json`**:
+    This file contains definitions for various LLM setups (e.g., "default_openai", "default_qwen_streaming").
+    - API keys within specific configurations can be set to `null` to use the corresponding key from the `api_keys` section or environment variables.
+    - The `api_keys` section maps generic key names (e.g., `OPENAI_API_KEY`) to placeholders. These are primarily resolved via `.env.local`.
+
+3.  **Review `agent_config.json`**:
+    This file defines settings for agents.
+    - `html_analyzer.default_llm_config_name` points to an LLM setup in `llm_config.json` for the HTML analyzer.
+    - `web_actions.default_llm_config_name` points to an LLM setup for the web automation agent.
+    - You can customize which LLM configurations your agents use by changing these names.
+
 ## Quick Start
 
-### Basic LLM Usage
+### 1. Using the LLM Module
 
 ```python
+# examples/llm_usage.py (Simplified)
 from swarm.llm import LLMFactory
+from dotenv import load_dotenv
+import os
 
-# Create any model with a simple interface
-client = LLMFactory.create("gpt-4", api_key="your-api-key")
+# Load .env.local (if you have API keys there)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env.local"))
 
-# Generate a response
-messages = [{"role": "user", "content": "Hello!"}]
-response = client.generate(messages)
-print(response)
+# Option 1: Create an LLM using a predefined configuration from llm_config.json
+try:
+    # LLMFactory will load llm_config.json by default
+    llm_from_config = LLMFactory.create_from_config("default_openai")
+    print(f"Created LLM from config: {llm_from_config.config.model_name}")
+    response = llm_from_config.generate([{"role": "user", "content": "Hello from configured LLM!"}])
+    print(f"Response: {response}")
+except ValueError as e:
+    print(f"Error creating LLM from config: {e}")
+    print("Ensure 'default_openai' is defined in llm_config.json and API keys are set.")
+
+# Option 2: Create an LLM by specifying model name directly (API key will be sourced)
+try:
+    direct_llm = LLMFactory.create(model_name="gpt-3.5-turbo") # API key from env or llm_config.json
+    print(f"Created LLM directly: {direct_llm.config.model_name}")
+    response = direct_llm.generate([{"role": "user", "content": "Hello from direct LLM!"}])
+    print(f"Response: {response}")
+except Exception as e:
+    print(f"Error creating direct LLM: {e}")
+
 ```
+Run: `python examples/llm_usage.py`
 
-### Running the Application
+### 2. Using the HTML Analyzer Agent
+
+```python
+# examples/html_analyzer_usage.py (Simplified)
+from swarm.web_broswer import HTMLAnalyzer
+from dotenv import load_dotenv
+import os
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env.local"))
+
+try:
+    # HTMLAnalyzer loads its LLM config name from agent_config.json
+    # LLMFactory then loads the details from llm_config.json
+    analyzer = HTMLAnalyzer()
+    
+    url_to_analyze = "https://www.python.org/"
+    print(f"Analyzing URL: {url_to_analyze}")
+    
+    # Analysis can be a string or a generator if streaming is enabled for the LLM config
+    analysis_result = analyzer.get_and_analyze_url(url_to_analyze)
+    
+    if hasattr(analysis_result, '__iter__') and not isinstance(analysis_result, str):
+        print("\n--- Streaming Analysis ---")
+        for chunk in analysis_result:
+            print(chunk, end="", flush=True)
+        print("\n------------------------")
+    elif analysis_result:
+        print("\n--- Full Analysis ---")
+        print(analysis_result)
+        print("---------------------")
+    else:
+        print("Failed to get analysis.")
+        
+except Exception as e:
+    print(f"An error occurred: {e}")
+    print("Ensure configurations in agent_config.json and llm_config.json are correct and API keys are set.")
+```
+Run: `python examples/html_analyzer_usage.py`
+
+### 3. Using the Web Actions Agent (Interactive)
+
+The `WebActions` agent is typically run interactively.
 
 ```bash
-# Run the main application
-python -m swarm
+# Ensure API keys and configurations are set in .env.local, llm_config.json, and agent_config.json
+# The WebActions agent will use the LLM configuration specified in agent_config.json 
+# (or overridden by WEB_ACTIONS_LLM_CONFIG_NAME env var).
 
-# Or using the installed script
-swarm
+python -m swarm.web_broswer.web_actions 
+```
+This will start an interactive session in your terminal:
+```
+Enter URL: <your_target_url>
+Current page: ...
+Your action/intention? ('refresh','back','forward','quit', or describe task): <describe_what_you_want_to_do>
 ```
 
-### Running Examples
+## Project Structure
 
-```bash
-# Run LLM examples
-python examples/llm_usage.py
 ```
+swarm/
+├── swarm/                 # Main package
+│   ├── __init__.py
+│   ├── llm/              # LLM module
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── factory.py
+│   │   └── (client implementations: openai_client.py, etc.)
+│   └── web_broswer/      # Web Browser Agents
+│       ├── __init__.py
+│       ├── html_analyzer.py
+│       └── web_actions.py
+├── examples/             # Usage examples
+│   ├── llm_usage.py
+│   └── html_analyzer_usage.py
+├── .env.sample           # Sample environment file
+├── .gitignore
+├── agent_config.json     # Agent configurations
+├── llm_config.json       # LLM provider and model configurations
+├── pyproject.toml        # Project configuration and dependencies
+└── README.md             # This file
+```
+
+## Environment Variables for API Keys
+
+API keys are primarily managed through `.env.local` (copied from `.env.sample`). `llm_config.json` references these or they can be picked up by the SDKs if set directly in your environment.
+
+Key names expected in `.env.local` or your environment:
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `DASHSCOPE_API_KEY` (for Qwen models via Aliyun DashScope)
+- `GOOGLE_API_KEY` (for Gemini models)
+- `DEEPSEEK_API_KEY`
+
+## Detailed API Reference
+
+### `swarm.llm.LLMFactory`
+
+The primary way to get LLM client instances.
+
+-   **`LLMFactory.create_from_config(config_name: str, config_path: Optional[str] = None, **override_kwargs) -> BaseLLM`**
+    -   Loads an LLM client based on a named configuration from `llm_config.json` (or `config_path` if specified).
+    -   `override_kwargs` can be used to dynamically change parameters of the loaded configuration (e.g., `temperature=0.5`, `stream_config=StreamConfig(enabled=True)`).
+-   **`LLMFactory.create(model_name: str, api_key: Optional[str] = None, ..., **kwargs) -> BaseLLM`**
+    -   Creates an LLM client by specifying parameters directly. API key resolution will check `llm_config.json` and environment variables if not provided.
+-   **`LLMFactory.list_available_configs() -> List[str]`**: Lists all LLM configuration names found in `llm_config.json`.
+-   Provider-specific helpers like `LLMFactory.create_openai(...)` are also available.
+
+### `swarm.llm.BaseLLM` (and its clients)
+
+All LLM clients provide:
+-   `generate(messages: List[Dict[str, str]], **kwargs) -> Union[str, Iterator[str]]`
+-   `generate_with_tools(messages: List[Dict[str, str]], tools: List[Dict[str, Any]], **kwargs) -> Union[str, Iterator[str], Dict]`
+-   `config: LLMConfig` (contains the resolved configuration for the client)
+-   Properties like `supports_streaming`, `supports_reasoning`.
+
+### `swarm.web_broswer.HTMLAnalyzer`
+
+Analyzes HTML content from a URL using an LLM.
+-   `__init__(self, llm_config_name: Optional[str] = None, **llm_override_kwargs)`:
+    -   `llm_config_name`: Name of the LLM configuration from `llm_config.json` to use. Defaults to value in `agent_config.json`.
+    -   `**llm_override_kwargs`: Override parameters for the chosen LLM configuration.
+-   `get_text_from_url(self, url: str) -> str | None`: Fetches and cleans text from a URL.
+-   `analyze_text_content(self, text_content: str, prompt_instruction: Optional[str] = None) -> str | None | Iterator[str]`: Sends text to LLM.
+-   `get_and_analyze_url(self, url: str, prompt_instruction: Optional[str] = None) -> str | None | Iterator[str]`: Combines fetching and analysis.
+
+### `swarm.web_broswer.WebActions`
+
+Integrates Selenium and LLM for interactive web automation.
+-   `__init__(self, llm_config_name: Optional[str] = None, headless: bool = True, **llm_override_kwargs)`:
+    -   `llm_config_name`: Name of LLM config from `llm_config.json`. Defaults based on `agent_config.json` or `WEB_ACTIONS_LLM_CONFIG_NAME` env var. Streaming is always disabled for the planning LLM.
+    -   `headless`: Run browser headlessly.
+    -   `**llm_override_kwargs`: Overrides for the LLM config.
+-   `open_url(self, url: str)`
+-   `get_simplified_dom(self) -> str`: Extracts interactive elements from the current page.
+-   `plan_actions_with_llm(self, user_intention: str, dom_info: str) -> Optional[List[Dict[str, Any]]]`
+-   `execute_actions(self, actions: List[Dict[str, Any]])`
+-   `interact(self)`: Starts the interactive command loop.
+-   `close(self)`: Closes the browser.
 
 ## Supported LLM Models
 
