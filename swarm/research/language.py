@@ -2,7 +2,6 @@
 Language Support - Handles internationalization for research output.
 """
 
-
 # Language translations for UI elements
 TRANSLATIONS = {
     "english": {
@@ -34,7 +33,7 @@ TRANSLATIONS = {
         "research_complete": "Research Complete!",
         "sources_found": "Sources Found",
         "themes_identified": "Themes Identified",
-        "tokens": "tokens"
+        "tokens": "tokens",
     },
     "chinese": {
         "research_report": "研究报告",
@@ -65,8 +64,8 @@ TRANSLATIONS = {
         "research_complete": "研究完成！",
         "sources_found": "发现来源",
         "themes_identified": "识别主题",
-        "tokens": "令牌"
-    }
+        "tokens": "令牌",
+    },
 }
 
 # Language-specific LLM prompts
@@ -127,7 +126,7 @@ Brief analysis of identified patterns
 Main takeaways and recommendations.
 
 Keep response focused and under 500 words.
-"""
+""",
     },
     "chinese": {
         "source_summary": """
@@ -185,8 +184,8 @@ Keep response focused and under 500 words.
 主要要点和建议。
 
 保持回应重点突出且在500字以内。
-"""
-    }
+""",
+    },
 }
 
 
@@ -204,10 +203,7 @@ class LanguageHelper:
 
     def get_prompt(self, prompt_type: str, **kwargs) -> str:
         """Get language-specific LLM prompt with formatting."""
-        template = LLM_PROMPTS[self.language].get(
-            prompt_type,
-            LLM_PROMPTS["english"].get(prompt_type, "")
-        )
+        template = LLM_PROMPTS[self.language].get(prompt_type, LLM_PROMPTS["english"].get(prompt_type, ""))
         return template.format(**kwargs)
 
     def is_chinese(self) -> bool:

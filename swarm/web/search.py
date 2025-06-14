@@ -104,9 +104,7 @@ class WebSearch:
                     if not title_elem:
                         for heading in container.find_all(["h2", "h3", "h4"]):
                             link_in_heading = heading.find("a", href=True)
-                            if link_in_heading and link_in_heading.get("href", "").startswith(
-                                "http"
-                            ):
+                            if link_in_heading and link_in_heading.get("href", "").startswith("http"):
                                 title_elem = link_in_heading
                                 link_url = link_in_heading.get("href")
                                 break
@@ -136,9 +134,7 @@ class WebSearch:
                         if desc_text and len(desc_text) > 20 and desc_text != title:
                             # Avoid duplicate title text
                             if title.lower() not in desc_text.lower():
-                                description = (
-                                    desc_text[:200] + "..." if len(desc_text) > 200 else desc_text
-                                )
+                                description = desc_text[:200] + "..." if len(desc_text) > 200 else desc_text
                                 break
 
                     # Skip if we don't have meaningful content
@@ -169,9 +165,7 @@ class WebSearch:
                         title = link.get_text(strip=True)
                         if title and len(title) > 3:
                             seen_urls.add(href)
-                            results.append(
-                                {"title": title, "url": href, "description": f"Result from {href}"}
-                            )
+                            results.append({"title": title, "url": href, "description": f"Result from {href}"})
                             if len(results) >= self.config.results_limit:
                                 break
 

@@ -20,11 +20,11 @@ async def handle_research_async(
     output_file: str | None = None,
     verbose: bool = False,
     headless: bool = True,
-    include_images: bool = True
+    include_images: bool = True,
 ) -> None:
     """
     Conduct comprehensive research on a topic.
-    
+
     Args:
         config: Application configuration
         query: Research query
@@ -38,18 +38,11 @@ async def handle_research_async(
     config.browser.headless = headless
 
     # Initialize research assistant
-    research_assistant = ResearchAssistant(
-        config=config,
-        verbose=verbose,
-        include_images=include_images
-    )
+    research_assistant = ResearchAssistant(config=config, verbose=verbose, include_images=include_images)
 
     try:
         # Conduct research
-        research_data = await research_assistant.conduct_research(
-            query=query,
-            max_sources=max_results
-        )
+        research_data = await research_assistant.conduct_research(query=query, max_sources=max_results)
 
         # Display results
         research_assistant.display_results(research_data)
@@ -60,8 +53,8 @@ async def handle_research_async(
         # Save results
         if output_file:
             # User provided filename
-            if not output_file.endswith('.md'):
-                output_file += '.md'
+            if not output_file.endswith(".md"):
+                output_file += ".md"
             save_filename = output_file
         else:
             # Auto-generate filename
@@ -69,28 +62,31 @@ async def handle_research_async(
             console.print(f"[dim]📝 Auto-generating filename: {save_filename}[/dim]")
 
         # Write markdown report to file
-        with open(save_filename, 'w', encoding='utf-8') as f:
+        with open(save_filename, "w", encoding="utf-8") as f:
             f.write(markdown_report)
 
         console.print(f"[green]💾 Report saved to: {save_filename}[/green]")
 
         # Display final completion message
-        analysis_results = research_data.get('analysis_results', [])
-        console.print(Panel.fit(
-            f"✅ [bold green]Research Complete![/bold green]\n"
-            f"📊 Sources analyzed: {len(analysis_results)}\n"
-            f"🎯 High relevance sources: {sum(1 for r in analysis_results if r.relevance_score >= config.research.relevance_threshold)}\n"
-            f"🖼️ Images found: {len(research_data.get('images_found', []))}\n"
-            f"🌐 Language: {config.research.output_language}\n"
-            f"📝 Report saved: {save_filename}",
-            title="🏆 Mission Accomplished",
-            border_style="green"
-        ))
+        analysis_results = research_data.get("analysis_results", [])
+        console.print(
+            Panel.fit(
+                f"✅ [bold green]Research Complete![/bold green]\n"
+                f"📊 Sources analyzed: {len(analysis_results)}\n"
+                f"🎯 High relevance sources: {sum(1 for r in analysis_results if r.relevance_score >= config.research.relevance_threshold)}\n"
+                f"🖼️ Images found: {len(research_data.get('images_found', []))}\n"
+                f"🌐 Language: {config.research.output_language}\n"
+                f"📝 Report saved: {save_filename}",
+                title="🏆 Mission Accomplished",
+                border_style="green",
+            )
+        )
 
     except Exception as e:
         console.print(f"[red]❌ Research failed: {str(e)}[/red]")
         if verbose:
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
     finally:
         # Cleanup
@@ -104,21 +100,23 @@ def handle_research(
     output_file: str | None = None,
     verbose: bool = False,
     headless: bool = True,
-    include_images: bool = True
+    include_images: bool = True,
 ) -> None:
     """
     Synchronous wrapper for research function.
     """
     try:
-        asyncio.run(handle_research_async(
-            config=config,
-            query=query,
-            max_results=max_results,
-            output_file=output_file,
-            verbose=verbose,
-            headless=headless,
-            include_images=include_images
-        ))
+        asyncio.run(
+            handle_research_async(
+                config=config,
+                query=query,
+                max_results=max_results,
+                output_file=output_file,
+                verbose=verbose,
+                headless=headless,
+                include_images=include_images,
+            )
+        )
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠️ Research interrupted by user[/yellow]")
     except Exception as e:
@@ -147,5 +145,5 @@ if __name__ == "__main__":
         output_file=args.output,
         verbose=args.verbose,
         headless=args.headless,
-        include_images=args.include_images
+        include_images=args.include_images,
     )

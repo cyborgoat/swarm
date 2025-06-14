@@ -36,21 +36,9 @@ def main():
     search_table.add_column("Description", style="white")
     search_table.add_column("Use Case", style="yellow")
 
-    search_table.add_row(
-        "1",
-        "Search within current page",
-        "Find specific content on the page you're viewing"
-    )
-    search_table.add_row(
-        "2",
-        "Search web with DuckDuckGo",
-        "Start fresh search for new information"
-    )
-    search_table.add_row(
-        "3",
-        "Use page's search bar",
-        "Utilize the website's own search functionality"
-    )
+    search_table.add_row("1", "Search within current page", "Find specific content on the page you're viewing")
+    search_table.add_row("2", "Search web with DuckDuckGo", "Start fresh search for new information")
+    search_table.add_row("3", "Use page's search bar", "Utilize the website's own search functionality")
 
     console.print(search_table)
 
@@ -78,7 +66,7 @@ def main():
         "💡 Improved help system with examples",
         "🎨 Better visual feedback and progress indicators",
         "🤖 Intelligent query routing based on current page",
-        "⚙️ Graceful error handling with helpful messages"
+        "⚙️ Graceful error handling with helpful messages",
     ]
 
     for feature in interactive_features:
@@ -101,26 +89,11 @@ def main():
     tools_table.add_column("Category", style="cyan")
     tools_table.add_column("Tools", style="white")
 
-    tools_table.add_row(
-        "Session",
-        "start_browser_session, close_browser_session, get_session_status"
-    )
-    tools_table.add_row(
-        "Navigation",
-        "navigate_to_url, get_current_page_info"
-    )
-    tools_table.add_row(
-        "Interaction",
-        "click_element, fill_input_field, select_dropdown_option"
-    )
-    tools_table.add_row(
-        "Content",
-        "extract_page_content, get_page_links, get_interactive_elements"
-    )
-    tools_table.add_row(
-        "Search",
-        "search_web, search_current_page, search_and_navigate"
-    )
+    tools_table.add_row("Session", "start_browser_session, close_browser_session, get_session_status")
+    tools_table.add_row("Navigation", "navigate_to_url, get_current_page_info")
+    tools_table.add_row("Interaction", "click_element, fill_input_field, select_dropdown_option")
+    tools_table.add_row("Content", "extract_page_content, get_page_links, get_interactive_elements")
+    tools_table.add_row("Search", "search_web, search_current_page, search_and_navigate")
 
     console.print(tools_table)
 
@@ -134,7 +107,7 @@ def main():
         "🎯 Intelligent query routing",
         "📱 Better user experience with Rich UI",
         "🔄 Persistent browser sessions",
-        "⚡ Fast, efficient web automation"
+        "⚡ Fast, efficient web automation",
     ]
 
     for benefit in benefits:
@@ -144,7 +117,9 @@ def main():
         Panel(
             Text.assemble(
                 ("🚀 Ready to try the enhanced Swarm?\n\n", "bold green"),
-                ("Start with: ", ""), ("uv run swarm interactive", "cyan"), (" or ", ""),
+                ("Start with: ", ""),
+                ("uv run swarm interactive", "cyan"),
+                (" or ", ""),
                 ("uv run swarm --verbose mcp-server", "cyan"),
             ),
             title="Get Started",

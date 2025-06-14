@@ -16,7 +16,7 @@ console = Console()
 def handle_browse(config: Config, url: str, verbose: bool = False) -> None:
     """
     Handle the browse command.
-    
+
     Args:
         config: Application configuration
         url: URL to browse
@@ -35,9 +35,9 @@ def handle_browse(config: Config, url: str, verbose: bool = False) -> None:
             progress.update(task, completed=True)
 
         # Display results
-        title = result.get('title', 'Untitled Page')
-        content_length = len(result.get('content', ''))
-        links_count = len(result.get('links', []))
+        title = result.get("title", "Untitled Page")
+        content_length = len(result.get("content", ""))
+        links_count = len(result.get("links", []))
 
         panel_content = (
             f"[bold green]Successfully browsed:[/bold green] {url}\n\n"
@@ -46,14 +46,14 @@ def handle_browse(config: Config, url: str, verbose: bool = False) -> None:
             f"[bold]Links found:[/bold] {links_count}"
         )
 
-        if verbose and result.get('content'):
-            preview = result['content'][:300].replace('\n', ' ').strip()
+        if verbose and result.get("content"):
+            preview = result["content"][:300].replace("\n", " ").strip()
             panel_content += f"\n\n[bold]Content preview:[/bold]\n{preview}..."
 
-        if verbose and result.get('links'):
+        if verbose and result.get("links"):
             panel_content += "\n\n[bold]Top links:[/bold]"
-            for i, link in enumerate(result['links'][:5], 1):
-                link_text = link.get('text', 'No text')[:40]
+            for i, link in enumerate(result["links"][:5], 1):
+                link_text = link.get("text", "No text")[:40]
                 panel_content += f"\n  {i}. {link_text}"
 
         console.print(Panel(panel_content, title="Browse Results", border_style="green"))

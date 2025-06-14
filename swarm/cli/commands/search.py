@@ -17,7 +17,7 @@ console = Console()
 def handle_search(config: Config, query: str, verbose: bool = False) -> None:
     """
     Handle the search command.
-    
+
     Args:
         config: Application configuration
         query: Search query
@@ -44,13 +44,13 @@ def handle_search(config: Config, query: str, verbose: bool = False) -> None:
             if verbose:
                 table.add_column("Description", style="dim", no_wrap=False, max_width=40)
 
-            for result in results[:config.search.results_limit]:
-                title = result.get('title', 'N/A')[:100]
-                url = result.get('url', 'N/A')
+            for result in results[: config.search.results_limit]:
+                title = result.get("title", "N/A")[:100]
+                url = result.get("url", "N/A")
 
                 row = [title, url]
                 if verbose:
-                    description = result.get('description', 'N/A')[:80] + "..."
+                    description = result.get("description", "N/A")[:80] + "..."
                     row.append(description)
 
                 table.add_row(*row)
@@ -59,8 +59,7 @@ def handle_search(config: Config, query: str, verbose: bool = False) -> None:
         else:
             console.print(
                 Panel(
-                    f"No results found for '{query}'\n\n"
-                    f"Try different search terms or check your internet connection.",
+                    f"No results found for '{query}'\n\nTry different search terms or check your internet connection.",
                     title="Search Results",
                     border_style="yellow",
                 )

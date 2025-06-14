@@ -23,11 +23,7 @@ class ResearchFormatter:
         self.language_helper = LanguageHelper(config.research.output_language)
 
     def display_results(
-        self,
-        analyses: list[AnalysisResult],
-        final_summary: str,
-        sources: list[dict[str, Any]],
-        verbose: bool = False
+        self, analyses: list[AnalysisResult], final_summary: str, sources: list[dict[str, Any]], verbose: bool = False
     ) -> None:
         """Display comprehensive research results in the terminal."""
 
@@ -41,14 +37,12 @@ class ResearchFormatter:
         stats_data = [
             f"📊 {lang.get_text('sources_analyzed')}: {len(sources)}",
             f"🎯 {lang.get_text('themes_identified')}: {len(set(theme for analysis in analyses for theme in analysis.themes))}",
-            f"🔍 {lang.get_text('relevance_distribution')}: {self._get_relevance_distribution(analyses)}"
+            f"🔍 {lang.get_text('relevance_distribution')}: {self._get_relevance_distribution(analyses)}",
         ]
 
-        console.print(Panel(
-            "\n".join(stats_data),
-            title=f"📋 {lang.get_text('research_complete')}",
-            border_style="green"
-        ))
+        console.print(
+            Panel("\n".join(stats_data), title=f"📋 {lang.get_text('research_complete')}", border_style="green")
+        )
 
         # Final Summary
         console.print(f"\n## 📝 {lang.get_text('executive_summary')}")
@@ -73,14 +67,14 @@ class ResearchFormatter:
             relevance_color = self._get_relevance_color(analysis.relevance_score)
 
             # Source panel
-            title = f"{i+1}. {source.get('title', 'Unknown')[:60]}... {depth_display}"
+            title = f"{i + 1}. {source.get('title', 'Unknown')[:60]}... {depth_display}"
             content = f"""
-{lang.get_text('relevance_score')}: [{relevance_color}]{analysis.relevance_score:.1f}[/{relevance_color}]/10
-{lang.get_text('word_count')}: {analysis.word_count}
+{lang.get_text("relevance_score")}: [{relevance_color}]{analysis.relevance_score:.1f}[/{relevance_color}]/10
+{lang.get_text("word_count")}: {analysis.word_count}
 
-{lang.get_text('summary')}: {analysis.summary}
+{lang.get_text("summary")}: {analysis.summary}
 
-{lang.get_text('finding')}: {analysis.key_finding}
+{lang.get_text("finding")}: {analysis.key_finding}
 """
 
             if analysis.themes:
@@ -115,7 +109,7 @@ class ResearchFormatter:
         analyses: list[AnalysisResult],
         final_summary: str,
         sources: list[dict[str, Any]],
-        include_images: bool = True
+        include_images: bool = True,
     ) -> str:
         """Generate comprehensive markdown research report."""
 
@@ -125,7 +119,9 @@ class ResearchFormatter:
         # Statistics
         total_words = sum(analysis.word_count for analysis in analyses)
         avg_relevance = sum(analysis.relevance_score for analysis in analyses) / len(analyses) if analyses else 0
-        high_relevance_count = sum(1 for analysis in analyses if analysis.relevance_score >= self.config.research.relevance_threshold)
+        high_relevance_count = sum(
+            1 for analysis in analyses if analysis.relevance_score >= self.config.research.relevance_threshold
+        )
 
         # Get all themes and count them
         all_themes = {}
@@ -139,41 +135,42 @@ class ResearchFormatter:
         all_images = []
         if include_images:
             for source in sources:
-                all_images.extend(source.get('images', []))
+                all_images.extend(source.get("images", []))
 
         # Generate report
-        report = f"""# {lang.get_text('research_report')}: {self.query}
+        report = f"""# {lang.get_text("research_report")}: {self.query}
 
-**{lang.get_text('generated')}:** {timestamp}  
-**{lang.get_text('model')}:** {self.config.llm.model}  
-**{lang.get_text('context_size')}:** {self.config.llm.max_tokens:,} {lang.get_text('tokens')}  
-**{lang.get_text('sources_analyzed')}:** {len(sources)}  
-**{lang.get_text('images_found')}:** {len(all_images)}
+**{lang.get_text("generated")}:** {timestamp}  
+**{lang.get_text("model")}:** {self.config.llm.model}  
+**{lang.get_text("context_size")}:** {self.config.llm.max_tokens:,} {lang.get_text("tokens")}  
+**{lang.get_text("sources_analyzed")}:** {len(sources)}  
+**{lang.get_text("images_found")}:** {len(all_images)}
 
 ---
 
-## {lang.get_text('executive_summary')}
+## {lang.get_text("executive_summary")}
 
 {final_summary}
 
 ---
 
-## {lang.get_text('key_findings')}
+## {lang.get_text("key_findings")}
 
 """
 
         # Key findings from high-relevance sources
         key_findings = [
-            analysis for analysis in analyses
+            analysis
+            for analysis in analyses
             if analysis.relevance_score >= max(3.0, self.config.research.relevance_threshold - 2.0)
         ][:6]
 
         for i, analysis in enumerate(key_findings, 1):
             report += f"""
-### {lang.get_text('finding')} {i}
+### {lang.get_text("finding")} {i}
 
-**{lang.get_text('relevance_score')}:** {analysis.relevance_score:.1f}/10  
-**{lang.get_text('source')}:** {sources[analyses.index(analysis)].get('title', 'Unknown')}
+**{lang.get_text("relevance_score")}:** {analysis.relevance_score:.1f}/10  
+**{lang.get_text("source")}:** {sources[analyses.index(analysis)].get("title", "Unknown")}
 
 {analysis.key_finding}
 
@@ -183,12 +180,12 @@ class ResearchFormatter:
         if top_themes:
             report += f"""---
 
-## {lang.get_text('identified_themes')}
+## {lang.get_text("identified_themes")}
 
 """
             for theme, count in top_themes:
                 supporting_sources = [
-                    sources[i].get('title', 'Unknown')[:50]
+                    sources[i].get("title", "Unknown")[:50]
                     for i, analysis in enumerate(analyses)
                     if theme in analysis.themes
                 ][:3]
@@ -196,8 +193,8 @@ class ResearchFormatter:
                 report += f"""
 ### {theme}
 
-**{lang.get_text('supporting_sources')}:** {count}  
-**{lang.get_text('sources_found')}:** {', '.join(supporting_sources)}
+**{lang.get_text("supporting_sources")}:** {count}  
+**{lang.get_text("sources_found")}:** {", ".join(supporting_sources)}
 
 """
 
@@ -205,30 +202,30 @@ class ResearchFormatter:
         if include_images and all_images:
             report += f"""---
 
-## {lang.get_text('relevant_images')}
+## {lang.get_text("relevant_images")}
 
 """
             for i, image in enumerate(all_images[:12], 1):  # Limit to 12 images
-                if image.get('alt_text') or image.get('caption'):
-                    description = image.get('alt_text') or image.get('caption')
+                if image.get("alt_text") or image.get("caption"):
+                    description = image.get("alt_text") or image.get("caption")
                     report += f"""
 ### Image {i}: {description[:100]}...
 
-![{description}]({image['url']})
+![{description}]({image["url"]})
 
 """
                 else:
                     report += f"""
 ### Image {i}
 
-![Research Image {i}]({image['url']})
+![Research Image {i}]({image["url"]})
 
 """
 
         # Detailed source analysis
         report += f"""---
 
-## {lang.get_text('detailed_source_analysis')}
+## {lang.get_text("detailed_source_analysis")}
 
 """
 
@@ -238,17 +235,17 @@ class ResearchFormatter:
             analysis_depth = "🧠 Enhanced" if analysis.analysis_method == "enhanced" else "🔍 Standard"
 
             report += f"""
-### {i}. {source.get('title', 'Unknown')}
+### {i}. {source.get("title", "Unknown")}
 
-**URL:** {source.get('url', 'N/A')}  
-**{lang.get_text('relevance_score')}:** {analysis.relevance_score:.1f}/10  
-**{lang.get_text('word_count')}:** {analysis.word_count:,}  
+**URL:** {source.get("url", "N/A")}  
+**{lang.get_text("relevance_score")}:** {analysis.relevance_score:.1f}/10  
+**{lang.get_text("word_count")}:** {analysis.word_count:,}  
 **Extraction:** {extraction_depth} | **Analysis:** {analysis_depth}
 
-#### {lang.get_text('summary')}
+#### {lang.get_text("summary")}
 {analysis.summary}
 
-#### {lang.get_text('key_findings')}
+#### {lang.get_text("key_findings")}
 {analysis.key_finding}
 
 """
@@ -257,10 +254,10 @@ class ResearchFormatter:
                 report += f"**{lang.get_text('identified_themes')}:** {', '.join(analysis.themes)}\n\n"
 
             # Content preview
-            content_preview = source.get('content', '')[:300]
+            content_preview = source.get("content", "")[:300]
             if content_preview:
                 report += f"""
-#### {lang.get_text('content_preview')}
+#### {lang.get_text("content_preview")}
 ```
 {content_preview}...
 ```
@@ -270,14 +267,14 @@ class ResearchFormatter:
         # Final statistics
         report += f"""---
 
-## {lang.get_text('all_search_results')}
+## {lang.get_text("all_search_results")}
 
-| # | {lang.get_text('source')} | {lang.get_text('relevance_score')} | {lang.get_text('word_count')} | Depth |
+| # | {lang.get_text("source")} | {lang.get_text("relevance_score")} | {lang.get_text("word_count")} | Depth |
 |---|-------|------------|------|-------|
 """
 
         for i, (analysis, source) in enumerate(zip(analyses, sources), 1):
-            title = source.get('title', 'Unknown')[:40]
+            title = source.get("title", "Unknown")[:40]
             extraction_indicator = "D" if analysis.extraction_method == "deep" else "N"
             analysis_indicator = "E" if analysis.analysis_method == "enhanced" else "N"
             depth_display = f"{extraction_indicator}/{analysis_indicator}"
@@ -286,7 +283,7 @@ class ResearchFormatter:
 
         report += f"""
 
-### {lang.get_text('depth_legend')}
+### {lang.get_text("depth_legend")}
 - **N/N**: Normal extraction, Standard analysis
 - **D/N**: Deep extraction, Standard analysis  
 - **N/E**: Normal extraction, Enhanced analysis
@@ -301,7 +298,7 @@ class ResearchFormatter:
 
 ---
 
-*{lang.get_text('research_report')} generated by Swarm Research Assistant*
+*{lang.get_text("research_report")} generated by Swarm Research Assistant*
 """
 
         return report
@@ -309,12 +306,12 @@ class ResearchFormatter:
     def get_auto_filename(self) -> str:
         """Generate automatic filename for research report."""
         # Sanitize query for filename
-        safe_query = "".join(c for c in self.query if c.isalnum() or c in (' ', '-', '_')).rstrip()
-        safe_query = safe_query.replace(' ', '_')[:50]  # Limit length
+        safe_query = "".join(c for c in self.query if c.isalnum() or c in (" ", "-", "_")).rstrip()
+        safe_query = safe_query.replace(" ", "_")[:50]  # Limit length
 
         # Add timestamp and model info
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        model_name = self.config.llm.model.replace(':', '_').replace('/', '_')
+        model_name = self.config.llm.model.replace(":", "_").replace("/", "_")
 
         # Add language suffix
         lang_suffix = "_zh" if self.language_helper.is_chinese() else "_en"

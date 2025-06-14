@@ -2,7 +2,6 @@
 Tests for MCP server functionality.
 """
 
-
 from swarm.core.config import Config
 from swarm.mcp.browser_server import BrowserMCPServer, create_browser_mcp_server
 

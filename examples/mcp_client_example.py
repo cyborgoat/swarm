@@ -16,7 +16,7 @@ from swarm.mcp.browser_server import create_browser_mcp_server
 def simulate_llm_tool_call(mcp_server, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Simulate an LLM calling an MCP tool.
-    
+
     This would normally be handled by the MCP protocol, but we simulate it here
     for demonstration purposes.
     """
@@ -31,7 +31,7 @@ def simulate_llm_tool_call(mcp_server, tool_name: str, arguments: dict[str, Any]
         return {
             "status": "success",
             "message": "Browser session started successfully",
-            "headless": arguments.get("headless", False)
+            "headless": arguments.get("headless", False),
         }
     elif tool_name == "navigate_to_url":
         # Simulate navigation
@@ -41,7 +41,7 @@ def simulate_llm_tool_call(mcp_server, tool_name: str, arguments: dict[str, Any]
             "title": "Example Page Title",
             "content_length": 1500,
             "links_count": 25,
-            "message": "Successfully navigated to Example Page Title"
+            "message": "Successfully navigated to Example Page Title",
         }
     elif tool_name == "search_web":
         # Simulate web search
@@ -52,16 +52,16 @@ def simulate_llm_tool_call(mcp_server, tool_name: str, arguments: dict[str, Any]
                 {
                     "title": "Python Web Scraping Tutorial",
                     "url": "https://example.com/tutorial1",
-                    "description": "Learn web scraping with Python"
+                    "description": "Learn web scraping with Python",
                 },
                 {
                     "title": "Advanced Python Web Automation",
                     "url": "https://example.com/tutorial2",
-                    "description": "Master web automation techniques"
-                }
+                    "description": "Master web automation techniques",
+                },
             ],
             "count": 2,
-            "message": "Found 2 search results"
+            "message": "Found 2 search results",
         }
     else:
         return {"status": "error", "message": f"Unknown tool: {tool_name}"}
@@ -84,27 +84,22 @@ def main():
     print("-" * 40)
 
     # Step 1: Start browser session
-    result1 = simulate_llm_tool_call(mcp_server, "start_browser_session", {
-        "headless": False
-    })
+    result1 = simulate_llm_tool_call(mcp_server, "start_browser_session", {"headless": False})
     print(f"✅ Result: {result1['message']}")
 
     # Step 2: Search for information
-    result2 = simulate_llm_tool_call(mcp_server, "search_web", {
-        "query": "Python web scraping tutorial",
-        "max_results": 5
-    })
+    result2 = simulate_llm_tool_call(
+        mcp_server, "search_web", {"query": "Python web scraping tutorial", "max_results": 5}
+    )
     print(f"✅ Result: {result2['message']}")
     print(f"📋 Found {len(result2['results'])} results:")
-    for i, result in enumerate(result2['results'], 1):
+    for i, result in enumerate(result2["results"], 1):
         print(f"   {i}. {result['title']}")
         print(f"      {result['url']}")
 
     # Step 3: Navigate to first result
-    first_url = result2['results'][0]['url']
-    result3 = simulate_llm_tool_call(mcp_server, "navigate_to_url", {
-        "url": first_url
-    })
+    first_url = result2["results"][0]["url"]
+    result3 = simulate_llm_tool_call(mcp_server, "navigate_to_url", {"url": first_url})
     print(f"✅ Result: {result3['message']}")
     print(f"📄 Page: {result3['title']}")
     print(f"📏 Content length: {result3['content_length']} characters")
@@ -133,7 +128,7 @@ def main():
         "get_interactive_elements - Get clickable elements",
         "search_web - DuckDuckGo web search",
         "search_current_page - Search within page",
-        "search_and_navigate - Search + auto-navigate"
+        "search_and_navigate - Search + auto-navigate",
     ]
 
     for tool in tools:

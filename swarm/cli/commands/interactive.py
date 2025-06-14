@@ -59,7 +59,7 @@ class AIResearchAssistant:
             "current_url": None,
             "page_title": None,
             "last_search_results": None,
-            "browser_active": False
+            "browser_active": False,
         }
 
         # Available MCP tools (will be populated dynamically)
@@ -75,7 +75,7 @@ class AIResearchAssistant:
                 result = await self.mcp_client.call_tool("start_browser_session", {"headless": self.headless})
                 if isinstance(result, list) and len(result) > 0:
                     result_content = result[0]
-                    if hasattr(result_content, 'text'):
+                    if hasattr(result_content, "text"):
                         try:
                             result_data = json.loads(result_content.text)
                         except json.JSONDecodeError:
@@ -100,12 +100,14 @@ class AIResearchAssistant:
                 # Get current session status
                 status = await self.mcp_client.call_tool("get_session_status")
                 if status and len(status) > 0:
-                    status_data = json.loads(status[0].text) if hasattr(status[0], 'text') else {}
-                    self.current_context.update({
-                        "browser_active": status_data.get("active", False),
-                        "current_url": status_data.get("current_url"),
-                        "page_title": status_data.get("title")
-                    })
+                    status_data = json.loads(status[0].text) if hasattr(status[0], "text") else {}
+                    self.current_context.update(
+                        {
+                            "browser_active": status_data.get("active", False),
+                            "current_url": status_data.get("current_url"),
+                            "page_title": status_data.get("title"),
+                        }
+                    )
         except Exception as e:
             logger.error(f"Failed to update context: {e}")
 
@@ -124,18 +126,14 @@ class AIResearchAssistant:
                     func_def = {
                         "name": tool.name,
                         "description": tool.description,
-                        "parameters": {
-                            "type": "object",
-                            "properties": {},
-                            "required": []
-                        }
+                        "parameters": {"type": "object", "properties": {}, "required": []},
                     }
 
                     # Parse input schema if available
-                    if hasattr(tool, 'inputSchema') and tool.inputSchema:
-                        if hasattr(tool.inputSchema, 'properties'):
+                    if hasattr(tool, "inputSchema") and tool.inputSchema:
+                        if hasattr(tool.inputSchema, "properties"):
                             func_def["parameters"]["properties"] = tool.inputSchema.properties
-                        if hasattr(tool.inputSchema, 'required'):
+                        if hasattr(tool.inputSchema, "required"):
                             func_def["parameters"]["required"] = tool.inputSchema.required
 
                     function_definitions.append(func_def)
@@ -216,9 +214,22 @@ Remember: If the user asks for ANY action, use tools. Only chat normally for gre
             # Check if this is casual conversation that doesn't need tools
             # Be more specific to avoid catching legitimate tool requests
             casual_patterns = [
-                "who are you", "what are you", "hello", "hi there", "hey there",
-                "how are you", "what's up", "good morning", "good afternoon", "good evening",
-                "thanks", "thank you", "bye", "goodbye", "help me understand", "explain"
+                "who are you",
+                "what are you",
+                "hello",
+                "hi there",
+                "hey there",
+                "how are you",
+                "what's up",
+                "good morning",
+                "good afternoon",
+                "good evening",
+                "thanks",
+                "thank you",
+                "bye",
+                "goodbye",
+                "help me understand",
+                "explain",
             ]
 
             user_lower = user_input.lower().strip()
@@ -274,9 +285,7 @@ Just tell me what you'd like to do in natural language!"""
 
             # Call LLM with function calling
             response = self.llm_client.generate_with_functions(
-                prompt=user_input,
-                functions=tools,
-                system_prompt=system_prompt
+                prompt=user_input, functions=tools, system_prompt=system_prompt
             )
 
             print(f"DEBUG: LLM response type: {type(response)}")
@@ -284,31 +293,31 @@ Just tell me what you'd like to do in natural language!"""
             print(f"DEBUG: Response content: {response.get('content', '')[:100]}...")
 
             # Check if LLM wants to call a function
-            function_call = response.get('function_call')
-            if function_call and function_call.get('name'):
-                function_name = function_call['name']
-                arguments = function_call.get('arguments', {})
+            function_call = response.get("function_call")
+            if function_call and function_call.get("name"):
+                function_name = function_call["name"]
+                arguments = function_call.get("arguments", {})
 
                 # Clean up arguments - ensure proper types and defaults
                 if function_name == "search_web":
                     # Ensure max_results has a proper default
-                    if 'max_results' not in arguments or arguments['max_results'] is None:
-                        arguments['max_results'] = 10
-                    elif not isinstance(arguments['max_results'], int):
+                    if "max_results" not in arguments or arguments["max_results"] is None:
+                        arguments["max_results"] = 10
+                    elif not isinstance(arguments["max_results"], int):
                         try:
-                            arguments['max_results'] = int(arguments['max_results'])
+                            arguments["max_results"] = int(arguments["max_results"])
                         except (ValueError, TypeError):
-                            arguments['max_results'] = 10
+                            arguments["max_results"] = 10
 
                 elif function_name == "extract_page_content":
                     # Ensure max_length has a proper default
-                    if 'max_length' not in arguments or arguments['max_length'] is None:
-                        arguments['max_length'] = 20000
-                    elif not isinstance(arguments['max_length'], int):
+                    if "max_length" not in arguments or arguments["max_length"] is None:
+                        arguments["max_length"] = 20000
+                    elif not isinstance(arguments["max_length"], int):
                         try:
-                            arguments['max_length'] = int(arguments['max_length'])
+                            arguments["max_length"] = int(arguments["max_length"])
                         except (ValueError, TypeError):
-                            arguments['max_length'] = 20000
+                            arguments["max_length"] = 20000
 
                 print(f"🔧 LLM CHOSE TOOL: {function_name}")
                 print(f"   Parameters: {arguments}")
@@ -316,10 +325,7 @@ Just tell me what you'd like to do in natural language!"""
                 # Execute the tool
                 async with self.mcp_client:
                     with Progress(
-                        SpinnerColumn(),
-                        TextColumn(f"🔧 Executing {function_name}..."),
-                        console=console,
-                        transient=True
+                        SpinnerColumn(), TextColumn(f"🔧 Executing {function_name}..."), console=console, transient=True
                     ) as progress:
                         progress.add_task("executing", total=None)
 
@@ -331,7 +337,7 @@ Just tell me what you'd like to do in natural language!"""
                             if isinstance(result, list) and len(result) > 0:
                                 # Extract content from MCP response
                                 result_content = result[0]
-                                if hasattr(result_content, 'text'):
+                                if hasattr(result_content, "text"):
                                     try:
                                         result_data = json.loads(result_content.text)
                                     except json.JSONDecodeError:
@@ -339,7 +345,11 @@ Just tell me what you'd like to do in natural language!"""
                                 else:
                                     result_data = {"status": "success", "content": str(result_content)}
                             else:
-                                result_data = result if isinstance(result, dict) else {"status": "success", "content": str(result)}
+                                result_data = (
+                                    result
+                                    if isinstance(result, dict)
+                                    else {"status": "success", "content": str(result)}
+                                )
 
                             # Pass the tool result back to LLM for human-readable interpretation
                             interpretation_prompt = f"""The user asked: "{user_input}"
@@ -354,10 +364,10 @@ Please provide a clear, human-readable response to the user based on this result
                             interpretation_response = self.llm_client.generate_with_functions(
                                 prompt=interpretation_prompt,
                                 functions=[],  # No tools for interpretation
-                                system_prompt="You are an AI assistant interpreting tool results for users. Provide clear, helpful responses based on the tool execution results. Do not call any tools - just interpret and explain the results."
+                                system_prompt="You are an AI assistant interpreting tool results for users. Provide clear, helpful responses based on the tool execution results. Do not call any tools - just interpret and explain the results.",
                             )
 
-                            interpreted_result = interpretation_response.get('content', 'Tool executed successfully.')
+                            interpreted_result = interpretation_response.get("content", "Tool executed successfully.")
 
                             # Also show a visual summary based on function type
                             if function_name == "search_web":
@@ -368,22 +378,22 @@ Please provide a clear, human-readable response to the user based on this result
                                 # Try to extract results from different possible structures
                                 if isinstance(result_data, dict):
                                     # Check if results are directly in result_data
-                                    if 'results' in result_data:
-                                        results = result_data['results']
+                                    if "results" in result_data:
+                                        results = result_data["results"]
                                     # Check if results are nested in content
-                                    elif 'content' in result_data:
-                                        content = result_data['content']
-                                        if isinstance(content, dict) and 'results' in content:
-                                            results = content['results']
+                                    elif "content" in result_data:
+                                        content = result_data["content"]
+                                        if isinstance(content, dict) and "results" in content:
+                                            results = content["results"]
                                         elif isinstance(content, list):
                                             results = content
                                     # Check if result_data itself is a list
-                                    elif isinstance(result_data.get('content'), str):
+                                    elif isinstance(result_data.get("content"), str):
                                         try:
                                             # Try to parse content as JSON
-                                            parsed_content = json.loads(result_data['content'])
-                                            if isinstance(parsed_content, dict) and 'results' in parsed_content:
-                                                results = parsed_content['results']
+                                            parsed_content = json.loads(result_data["content"])
+                                            if isinstance(parsed_content, dict) and "results" in parsed_content:
+                                                results = parsed_content["results"]
                                         except:
                                             pass
 
@@ -391,22 +401,24 @@ Please provide a clear, human-readable response to the user based on this result
                                     results_count = len(results)
 
                                     # Display search results in detail
-                                    console.print(Panel.fit(
-                                        f"🔍 Found {results_count} search results for: {arguments.get('query', 'N/A')}",
-                                        title="🤖 Search Results",
-                                        border_style="green"
-                                    ))
+                                    console.print(
+                                        Panel.fit(
+                                            f"🔍 Found {results_count} search results for: {arguments.get('query', 'N/A')}",
+                                            title="🤖 Search Results",
+                                            border_style="green",
+                                        )
+                                    )
 
                                     # Show top results with better formatting
                                     for i, result_item in enumerate(results[:5], 1):
                                         if isinstance(result_item, dict):
-                                            title = result_item.get('title', 'No title')
-                                            url = result_item.get('url', 'No URL')
-                                            description = result_item.get('description', '')
+                                            title = result_item.get("title", "No title")
+                                            url = result_item.get("url", "No URL")
+                                            description = result_item.get("description", "")
 
                                             console.print(f"\n[bold cyan]{i}. {title}[/bold cyan]")
                                             console.print(f"   [blue]🔗 {url}[/blue]")
-                                            if description and description != 'No description':
+                                            if description and description != "No description":
                                                 # Limit description length and clean it up
                                                 clean_desc = description.strip()[:200]
                                                 if len(description) > 200:
@@ -420,84 +432,95 @@ Please provide a clear, human-readable response to the user based on this result
                                         console.print(f"\n[dim]... and {results_count - 5} more results[/dim]")
                                 else:
                                     # No results found or couldn't parse results
-                                    console.print(Panel.fit(
-                                        f"No search results found for: {arguments.get('query', 'N/A')}\n"
-                                        f"Raw result: {str(result_data)[:200]}...",
-                                        title="🤖 Search Results",
-                                        border_style="yellow"
-                                    ))
+                                    console.print(
+                                        Panel.fit(
+                                            f"No search results found for: {arguments.get('query', 'N/A')}\n"
+                                            f"Raw result: {str(result_data)[:200]}...",
+                                            title="🤖 Search Results",
+                                            border_style="yellow",
+                                        )
+                                    )
 
                             elif function_name == "navigate_to_url":
-                                url = result_data.get('url', arguments.get('url', 'Unknown'))
-                                title = result_data.get('title', 'Unknown')
+                                url = result_data.get("url", arguments.get("url", "Unknown"))
+                                title = result_data.get("title", "Unknown")
 
-                                console.print(Panel.fit(
-                                    f"🌐 Navigated to: **{title}**\n"
-                                    f"URL: {url}",
-                                    title="🤖 Navigation Complete",
-                                    border_style="green"
-                                ))
+                                console.print(
+                                    Panel.fit(
+                                        f"🌐 Navigated to: **{title}**\nURL: {url}",
+                                        title="🤖 Navigation Complete",
+                                        border_style="green",
+                                    )
+                                )
 
                             elif function_name == "extract_page_content":
-                                content = result_data.get('content', '')
-                                length = result_data.get('length', 0)
+                                content = result_data.get("content", "")
+                                length = result_data.get("length", 0)
 
                                 if content:
                                     # Show a preview of the content
                                     preview = content[:300] + "..." if len(content) > 300 else content
-                                    console.print(Panel.fit(
-                                        f"📄 Extracted {length} characters:\n\n{preview}",
-                                        title="🤖 Page Content Preview",
-                                        border_style="green"
-                                    ))
+                                    console.print(
+                                        Panel.fit(
+                                            f"📄 Extracted {length} characters:\n\n{preview}",
+                                            title="🤖 Page Content Preview",
+                                            border_style="green",
+                                        )
+                                    )
 
                             elif function_name == "get_session_status":
                                 status_info = result_data if isinstance(result_data, dict) else {}
-                                active = status_info.get('active', False)
-                                current_url = status_info.get('current_url', 'None')
+                                active = status_info.get("active", False)
+                                current_url = status_info.get("current_url", "None")
 
-                                console.print(Panel.fit(
-                                    f"🌐 Browser Status: {'✅ Active' if active else '❌ Inactive'}\n"
-                                    f"Current URL: {current_url}",
-                                    title="🤖 Session Status",
-                                    border_style="green"
-                                ))
+                                console.print(
+                                    Panel.fit(
+                                        f"🌐 Browser Status: {'✅ Active' if active else '❌ Inactive'}\n"
+                                        f"Current URL: {current_url}",
+                                        title="🤖 Session Status",
+                                        border_style="green",
+                                    )
+                                )
 
                             elif function_name == "click_element_by_text":
-                                text = arguments.get('text', 'Unknown')
-                                success = result_data.get('status') == 'success'
-                                message = result_data.get('message', 'Click completed')
+                                text = arguments.get("text", "Unknown")
+                                success = result_data.get("status") == "success"
+                                message = result_data.get("message", "Click completed")
 
-                                console.print(Panel.fit(
-                                    f"🖱️ {'✅ Successfully' if success else '❌ Failed to'} clicked element:\n"
-                                    f"Text: '{text}'\n"
-                                    f"Result: {message}",
-                                    title="🤖 Click Action",
-                                    border_style="green" if success else "red"
-                                ))
+                                console.print(
+                                    Panel.fit(
+                                        f"🖱️ {'✅ Successfully' if success else '❌ Failed to'} clicked element:\n"
+                                        f"Text: '{text}'\n"
+                                        f"Result: {message}",
+                                        title="🤖 Click Action",
+                                        border_style="green" if success else "red",
+                                    )
+                                )
 
                             elif function_name == "fill_input_by_label":
-                                label = arguments.get('label', 'Unknown')
-                                value = arguments.get('value', 'Unknown')
-                                success = result_data.get('status') == 'success'
-                                message = result_data.get('message', 'Fill completed')
+                                label = arguments.get("label", "Unknown")
+                                value = arguments.get("value", "Unknown")
+                                success = result_data.get("status") == "success"
+                                message = result_data.get("message", "Fill completed")
 
-                                console.print(Panel.fit(
-                                    f"📝 {'✅ Successfully' if success else '❌ Failed to'} filled input field:\n"
-                                    f"Field: '{label}'\n"
-                                    f"Value: '{value}'\n"
-                                    f"Result: {message}",
-                                    title="🤖 Fill Action",
-                                    border_style="green" if success else "red"
-                                ))
+                                console.print(
+                                    Panel.fit(
+                                        f"📝 {'✅ Successfully' if success else '❌ Failed to'} filled input field:\n"
+                                        f"Field: '{label}'\n"
+                                        f"Value: '{value}'\n"
+                                        f"Result: {message}",
+                                        title="🤖 Fill Action",
+                                        border_style="green" if success else "red",
+                                    )
+                                )
 
                             elif function_name == "get_page_elements":
                                 elements = result_data if isinstance(result_data, dict) else {}
-                                buttons = elements.get('buttons', [])
-                                inputs = elements.get('inputs', [])
-                                links = elements.get('links', [])
-                                selects = elements.get('selects', [])
-                                total = elements.get('total_count', 0)
+                                buttons = elements.get("buttons", [])
+                                inputs = elements.get("inputs", [])
+                                links = elements.get("links", [])
+                                selects = elements.get("selects", [])
+                                total = elements.get("total_count", 0)
 
                                 element_summary = []
                                 if buttons:
@@ -509,12 +532,13 @@ Please provide a clear, human-readable response to the user based on this result
                                 if selects:
                                     element_summary.append(f"📋 {len(selects)} dropdowns")
 
-                                console.print(Panel.fit(
-                                    f"🔍 Found {total} interactive elements:\n" +
-                                    ", ".join(element_summary),
-                                    title="🤖 Page Elements",
-                                    border_style="green"
-                                ))
+                                console.print(
+                                    Panel.fit(
+                                        f"🔍 Found {total} interactive elements:\n" + ", ".join(element_summary),
+                                        title="🤖 Page Elements",
+                                        border_style="green",
+                                    )
+                                )
 
                                 # Show some examples of each type
                                 if buttons:
@@ -528,27 +552,31 @@ Please provide a clear, human-readable response to the user based on this result
                                         console.print(f"[dim]... and {len(inputs) - 5} more[/dim]")
 
                             elif function_name == "take_screenshot":
-                                path = result_data.get('path', 'Unknown')
-                                success = result_data.get('status') == 'success'
-                                message = result_data.get('message', 'Screenshot completed')
+                                path = result_data.get("path", "Unknown")
+                                success = result_data.get("status") == "success"
+                                message = result_data.get("message", "Screenshot completed")
 
-                                console.print(Panel.fit(
-                                    f"📸 {'✅ Successfully' if success else '❌ Failed to'} take screenshot:\n"
-                                    f"Path: {path}\n"
-                                    f"Result: {message}",
-                                    title="🤖 Screenshot",
-                                    border_style="green" if success else "red"
-                                ))
+                                console.print(
+                                    Panel.fit(
+                                        f"📸 {'✅ Successfully' if success else '❌ Failed to'} take screenshot:\n"
+                                        f"Path: {path}\n"
+                                        f"Result: {message}",
+                                        title="🤖 Screenshot",
+                                        border_style="green" if success else "red",
+                                    )
+                                )
 
                             else:
                                 # Generic tool result
-                                success = result_data.get('status') == 'success'
-                                message = result_data.get('message', 'Tool executed successfully')
-                                console.print(Panel.fit(
-                                    f"{'✅' if success else '❌'} {function_name} completed:\n{message}",
-                                    title="🤖 Tool Result",
-                                    border_style="green" if success else "red"
-                                ))
+                                success = result_data.get("status") == "success"
+                                message = result_data.get("message", "Tool executed successfully")
+                                console.print(
+                                    Panel.fit(
+                                        f"{'✅' if success else '❌'} {function_name} completed:\n{message}",
+                                        title="🤖 Tool Result",
+                                        border_style="green" if success else "red",
+                                    )
+                                )
 
                             # Return the LLM's interpretation
                             return interpreted_result
@@ -556,16 +584,18 @@ Please provide a clear, human-readable response to the user based on this result
                         except Exception as e:
                             console.print(f"❌ TOOL EXECUTION ERROR: {function_name}")
                             console.print(f"   Error: {str(e)}")
-                            console.print(Panel.fit(
-                                f"Failed to execute {function_name}: {str(e)}",
-                                title="🤖 AI Assistant",
-                                border_style="red"
-                            ))
+                            console.print(
+                                Panel.fit(
+                                    f"Failed to execute {function_name}: {str(e)}",
+                                    title="🤖 AI Assistant",
+                                    border_style="red",
+                                )
+                            )
                             return f"❌ Failed to execute {function_name}: {str(e)}"
 
             else:
                 # No function call, but this might be an issue - let's be more explicit
-                content = response.get('content', '')
+                content = response.get("content", "")
                 if content:
                     console.print("⚠️ LLM provided text response instead of using tools:")
                     console.print(f"Response: {content}")
@@ -578,29 +608,33 @@ Please provide a clear, human-readable response to the user based on this result
             logger.error(f"❌ Unexpected error: {e}")
             print(f"❌ Unexpected error: {e}")
             import traceback
+
             print(f"DEBUG: {traceback.format_exc()}")
             return f"Sorry, I encountered an error: {str(e)}"
 
     def run_interactive_loop(self) -> None:
         """Run the main interactive loop."""
-        console.print(Panel.fit(
-            "[bold green]🐝 AI Research Assistant[/bold green]\n"
-            "[dim]Powered by LLM + Browser Automation with Context Awareness[/dim]\n\n"
-            "[cyan]Examples:[/cyan]\n"
-            "• 'Search for Python web scraping tutorials'\n"
-            "• 'Browse github.com'\n"
-            "• 'What is this page about?'\n"
-            "• 'Click the login button'\n"
-            "• 'Fill email with john@example.com'\n\n"
-            "[dim]Type 'help' for commands, 'quit' to exit[/dim]",
-            border_style="green"
-        ))
+        console.print(
+            Panel.fit(
+                "[bold green]🐝 AI Research Assistant[/bold green]\n"
+                "[dim]Powered by LLM + Browser Automation with Context Awareness[/dim]\n\n"
+                "[cyan]Examples:[/cyan]\n"
+                "• 'Search for Python web scraping tutorials'\n"
+                "• 'Browse github.com'\n"
+                "• 'What is this page about?'\n"
+                "• 'Click the login button'\n"
+                "• 'Fill email with john@example.com'\n\n"
+                "[dim]Type 'help' for commands, 'quit' to exit[/dim]",
+                border_style="green",
+            )
+        )
 
         # Check if we're already in an event loop
         try:
             loop = asyncio.get_running_loop()
             # We're in an event loop, create a task
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(asyncio.run, self._async_interactive_loop())
                 future.result()
@@ -619,22 +653,22 @@ Please provide a clear, human-readable response to the user based on this result
                     continue
 
                 # Handle special commands
-                if user_input.lower() in ['quit', 'exit', 'q']:
+                if user_input.lower() in ["quit", "exit", "q"]:
                     if self.mcp_server and self.mcp_server._session_active:
                         console.print("[yellow]🔄 Closing browser session...[/yellow]")
                         self.mcp_server.close_session()
                     console.print("[green]👋 Goodbye![/green]")
                     break
 
-                elif user_input.lower() in ['help', 'h']:
+                elif user_input.lower() in ["help", "h"]:
                     self._show_help()
                     continue
 
-                elif user_input.lower() in ['status', 'info']:
+                elif user_input.lower() in ["status", "info"]:
                     await self._show_status()
                     continue
 
-                elif user_input.lower() in ['clear', 'cls']:
+                elif user_input.lower() in ["clear", "cls"]:
                     console.clear()
                     continue
 
@@ -643,11 +677,7 @@ Please provide a clear, human-readable response to the user based on this result
                 response = await self.process_user_query(user_input)
 
                 # Display the response
-                console.print(Panel(
-                    Markdown(response),
-                    title="🤖 AI Assistant",
-                    border_style="blue"
-                ))
+                console.print(Panel(Markdown(response), title="🤖 AI Assistant", border_style="blue"))
 
             except KeyboardInterrupt:
                 console.print("\n[yellow]⚠️ Interrupted by user[/yellow]")
@@ -659,6 +689,7 @@ Please provide a clear, human-readable response to the user based on this result
             except Exception as e:
                 console.print(f"[red]❌ Unexpected error: {str(e)}[/red]")
                 import traceback
+
                 console.print(f"[dim]DEBUG: {traceback.format_exc()}[/dim]")
 
     def _show_help(self) -> None:
@@ -726,7 +757,7 @@ The AI automatically knows your current browser state and will suggest appropria
                 result = await self.mcp_client.call_tool("get_session_status", {})
                 if isinstance(result, list) and len(result) > 0:
                     result_content = result[0]
-                    if hasattr(result_content, 'text'):
+                    if hasattr(result_content, "text"):
                         try:
                             status_data = json.loads(result_content.text)
                         except json.JSONDecodeError:
@@ -752,7 +783,7 @@ The AI automatically knows your current browser state and will suggest appropria
                 # Handle different response formats
                 if isinstance(tools_result, list):
                     tools_list = tools_result
-                elif hasattr(tools_result, 'tools'):
+                elif hasattr(tools_result, "tools"):
                     tools_list = tools_result.tools
                 else:
                     logger.warning(f"Unexpected tools result format: {type(tools_result)}")
@@ -762,30 +793,26 @@ The AI automatically knows your current browser state and will suggest appropria
                 functions = []
                 for tool in tools_list:
                     # Handle different tool object formats
-                    if hasattr(tool, 'name'):
+                    if hasattr(tool, "name"):
                         tool_name = tool.name
-                        tool_description = getattr(tool, 'description', f"Execute {tool_name}")
+                        tool_description = getattr(tool, "description", f"Execute {tool_name}")
                     elif isinstance(tool, dict):
-                        tool_name = tool.get('name', 'unknown')
-                        tool_description = tool.get('description', f"Execute {tool_name}")
+                        tool_name = tool.get("name", "unknown")
+                        tool_description = tool.get("description", f"Execute {tool_name}")
                     else:
                         continue
 
                     function_def = {
                         "name": tool_name,
                         "description": tool_description,
-                        "parameters": {
-                            "type": "object",
-                            "properties": {},
-                            "required": []
-                        }
+                        "parameters": {"type": "object", "properties": {}, "required": []},
                     }
 
                     # Add input schema if available
-                    if hasattr(tool, 'inputSchema') and tool.inputSchema:
+                    if hasattr(tool, "inputSchema") and tool.inputSchema:
                         function_def["parameters"] = tool.inputSchema
-                    elif isinstance(tool, dict) and 'inputSchema' in tool:
-                        function_def["parameters"] = tool['inputSchema']
+                    elif isinstance(tool, dict) and "inputSchema" in tool:
+                        function_def["parameters"] = tool["inputSchema"]
 
                     functions.append(function_def)
 
@@ -799,7 +826,7 @@ The AI automatically knows your current browser state and will suggest appropria
 def handle_interactive(config: Config, use_mcp: bool = True, headless: bool = False, verbose: bool = False) -> None:
     """
     Handle interactive mode with AI-powered browser automation and context management.
-    
+
     Args:
         config: Application configuration
         use_mcp: Whether to use MCP server for browser automation

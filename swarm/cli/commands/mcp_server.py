@@ -24,7 +24,7 @@ def signal_handler(signum, frame):
 def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -> None:
     """
     Start the consolidated MCP server to expose browser automation tools to LLMs.
-    
+
     Args:
         config: Application configuration
         port: Port parameter (ignored - FastMCP uses stdio transport)
@@ -88,14 +88,14 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
 
         if verbose:
             console.print("\n[bold cyan]Integration Examples:[/bold cyan]")
-            console.print('[dim]Claude Desktop: "swarm-browser": {"command": "uv", "args": ["run", "swarm", "mcp-server"]}[/dim]')
+            console.print(
+                '[dim]Claude Desktop: "swarm-browser": {"command": "uv", "args": ["run", "swarm", "mcp-server"]}[/dim]'
+            )
 
         # Configure logging for MCP server
         import logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         logger = logging.getLogger(__name__)
         logger.info("🚀 Consolidated MCP Server configured with logging")
 
@@ -108,6 +108,7 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
         console.print(f"[red]❌ Error: {str(e)}[/red]")
         if verbose:
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
     finally:
         console.print("[green]Thanks for using Swarm! 🐝[/green]")

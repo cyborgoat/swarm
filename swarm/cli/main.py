@@ -2,7 +2,6 @@
 Main CLI entry point for Swarm.
 """
 
-
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -30,13 +29,27 @@ def research(
     output_file: str | None = typer.Option(None, "--output", "-o", help="Save results to file"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
     headless: bool = typer.Option(True, "--headless/--no-headless", help="Run browser in headless mode"),
-    context_size: int | None = typer.Option(None, "--context-size", "-c", help="Override LLM context size (max tokens)"),
-    model: str | None = typer.Option(None, "--model", "-m", help="Override LLM model (e.g., llama3.2:latest, gemma3:12b)"),
-    include_images: bool = typer.Option(True, "--include-images/--no-images", help="Include images in research results"),
-    relevance_threshold: float | None = typer.Option(None, "--relevance-threshold", "-r", help="Minimum relevance score threshold (default: 5.0)"),
-    min_word_count: int | None = typer.Option(None, "--min-words", "-w", help="Minimum word count for content (default: 300)"),
-    deep_content_limit: int | None = typer.Option(None, "--deep-content", "-d", help="Deep content extraction limit (default: 8192)"),
-    language: str | None = typer.Option(None, "--language", "-l", help="Output language: english or chinese (default: english)"),
+    context_size: int | None = typer.Option(
+        None, "--context-size", "-c", help="Override LLM context size (max tokens)"
+    ),
+    model: str | None = typer.Option(
+        None, "--model", "-m", help="Override LLM model (e.g., llama3.2:latest, gemma3:12b)"
+    ),
+    include_images: bool = typer.Option(
+        True, "--include-images/--no-images", help="Include images in research results"
+    ),
+    relevance_threshold: float | None = typer.Option(
+        None, "--relevance-threshold", "-r", help="Minimum relevance score threshold (default: 5.0)"
+    ),
+    min_word_count: int | None = typer.Option(
+        None, "--min-words", "-w", help="Minimum word count for content (default: 300)"
+    ),
+    deep_content_limit: int | None = typer.Option(
+        None, "--deep-content", "-d", help="Deep content extraction limit (default: 8192)"
+    ),
+    language: str | None = typer.Option(
+        None, "--language", "-l", help="Output language: english or chinese (default: english)"
+    ),
 ) -> None:
     """🔬 Research a topic using AI and web browsing."""
     config = Config.from_env()

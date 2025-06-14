@@ -57,8 +57,8 @@ def main():
         try:
             llm = LLMClient(config.llm)
             analysis = llm.analyze_webpage(
-                result['content'][:1000],  # First 1000 chars
-                result['url']
+                result["content"][:1000],  # First 1000 chars
+                result["url"],
             )
             print("✓ LLM Analysis:")
             print(f"  {analysis[:200]}...")

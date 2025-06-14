@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class SwarmMCPServer:
     """
     Consolidated MCP Server for Swarm browser automation.
-    
+
     This class provides both the MCP server functionality and adapter interface
     for seamless integration with the interactive mode.
     """
@@ -66,10 +66,10 @@ class SwarmMCPServer:
         async def start_browser_session(headless: bool = False) -> dict[str, Any]:
             """
             Start browser session using native Playwright APIs.
-            
+
             Args:
                 headless: Whether to run browser in headless mode
-                
+
             Returns:
                 Session status
             """
@@ -105,7 +105,7 @@ class SwarmMCPServer:
         async def close_browser_session() -> dict[str, Any]:
             """
             Close browser session.
-            
+
             Returns:
                 Close status
             """
@@ -134,10 +134,10 @@ class SwarmMCPServer:
         async def navigate_to_url(url: str) -> dict[str, Any]:
             """
             Navigate to URL using browser.
-            
+
             Args:
                 url: URL to navigate to
-                
+
             Returns:
                 Navigation result
             """
@@ -161,11 +161,11 @@ class SwarmMCPServer:
         async def extract_page_content(query: str | None = None, max_length: int = 20000) -> dict[str, Any]:
             """
             Extract content from current page.
-            
+
             Args:
                 query: Optional search query to filter content
                 max_length: Maximum content length (default 20000)
-                
+
             Returns:
                 Extracted content
             """
@@ -189,7 +189,7 @@ class SwarmMCPServer:
         async def get_session_status() -> dict[str, Any]:
             """
             Get current browser session status.
-            
+
             Returns:
                 Session status information
             """
@@ -207,10 +207,10 @@ class SwarmMCPServer:
         async def click_element_by_text(text: str) -> dict[str, Any]:
             """
             Click element by visible text.
-            
+
             Args:
                 text: Text to search for and click
-                
+
             Returns:
                 Click result
             """
@@ -234,11 +234,11 @@ class SwarmMCPServer:
         async def fill_input_by_label(label: str, value: str) -> dict[str, Any]:
             """
             Fill input field by label.
-            
+
             Args:
                 label: Label text to find input field
                 value: Value to fill
-                
+
             Returns:
                 Fill result
             """
@@ -270,11 +270,11 @@ class SwarmMCPServer:
         def search_web(query: str, max_results: int = 10) -> dict[str, Any]:
             """
             Search the web using DuckDuckGo.
-            
+
             Args:
                 query: Search query string
                 max_results: Maximum number of results to return (default: 10)
-                
+
             Returns:
                 Search results with status and results list
             """
@@ -297,7 +297,7 @@ class SwarmMCPServer:
                     "query": query,
                     "results": results,
                     "count": len(results),
-                    "message": f"Found {len(results)} search results"
+                    "message": f"Found {len(results)} search results",
                 }
 
             except Exception as e:
@@ -325,7 +325,7 @@ class SwarmMCPServer:
                     "links": elements.get("links", []),
                     "selects": elements.get("selects", []),
                     "total_count": total,
-                    "message": f"Found {total} interactive elements"
+                    "message": f"Found {total} interactive elements",
                 }
 
             except Exception as e:
@@ -337,10 +337,10 @@ class SwarmMCPServer:
         def take_screenshot(path: str | None = None) -> dict[str, Any]:
             """
             Take screenshot of current page.
-            
+
             Args:
                 path: Optional path to save screenshot (default: auto-generated)
-                
+
             Returns:
                 Screenshot result with file path
             """
@@ -403,13 +403,13 @@ class SwarmMCPServer:
         """Internal method to call MCP tools directly."""
         try:
             # Call the tool functions directly by accessing the registered functions
-            if not hasattr(self, '_tool_functions'):
+            if not hasattr(self, "_tool_functions"):
                 return {"status": "error", "message": "Tool functions not initialized"}
 
             if tool_name in self._tool_functions:
                 func = self._tool_functions[tool_name]
                 # If it's a FunctionTool object, get the actual function
-                if hasattr(func, 'fn'):
+                if hasattr(func, "fn"):
                     func = func.fn
 
                 if tool_name == "start_browser_session":
@@ -444,7 +444,7 @@ class SwarmMCPServer:
                 "url": nav_result.get("url", url),
                 "title": nav_result.get("title", ""),
                 "content": content_result.get("content", ""),
-                "links": []
+                "links": [],
             }
         else:
             raise Exception(nav_result.get("message", "Navigation failed"))
@@ -462,7 +462,7 @@ class SwarmMCPServer:
                 "buttons": result.get("buttons", []),
                 "inputs": result.get("inputs", []),
                 "links": result.get("links", []),
-                "selects": result.get("selects", [])
+                "selects": result.get("selects", []),
             }
         return {"buttons": [], "inputs": [], "links": [], "selects": []}
 
@@ -479,10 +479,10 @@ class SwarmMCPServer:
 def create_mcp_server(config: Config) -> SwarmMCPServer:
     """
     Create and configure the consolidated MCP server.
-    
+
     Args:
         config: Application configuration
-        
+
     Returns:
         Configured SwarmMCPServer instance
     """

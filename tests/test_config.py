@@ -27,12 +27,7 @@ def test_default_config():
 
 def test_llm_config():
     """Test LLM configuration."""
-    llm_config = LLMConfig(
-        base_url="http://localhost:8000",
-        model="gpt-4",
-        temperature=0.5,
-        max_tokens=1024
-    )
+    llm_config = LLMConfig(base_url="http://localhost:8000", model="gpt-4", temperature=0.5, max_tokens=1024)
 
     assert llm_config.base_url == "http://localhost:8000"
     assert llm_config.model == "gpt-4"
@@ -42,12 +37,7 @@ def test_llm_config():
 
 def test_browser_config():
     """Test browser configuration."""
-    browser_config = BrowserConfig(
-        headless=False,
-        timeout=60000,
-        viewport_width=1920,
-        viewport_height=1080
-    )
+    browser_config = BrowserConfig(headless=False, timeout=60000, viewport_width=1920, viewport_height=1080)
 
     assert browser_config.headless is False
     assert browser_config.timeout == 60000
