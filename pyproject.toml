@@ -8,11 +8,18 @@ version = "2.0.0"
 description = "A comprehensive CLI-based agent for web browsing, automation, and AI-powered research"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
-authors = [
-    {name = "Junxiao Guo", email = "junxiao.guo@example.com"},
+license = { text = "MIT" }
+authors = [{ name = "Junxiao Guo", email = "junxiao.guo@example.com" }]
+keywords = [
+    "cli",
+    "web-automation",
+    "llm",
+    "research",
+    "browsing",
+    "mcp",
+    "playwright",
+    "ai",
 ]
-keywords = ["cli", "web-automation", "llm", "research", "browsing", "mcp", "playwright", "ai"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -29,26 +36,27 @@ classifiers = [
 ]
 
 dependencies = [
-    "playwright>=1.40.0",
-    "typer>=0.9.0",
-    "rich>=13.0.0",
-    "httpx>=0.24.0",
-    "pydantic>=2.0.0",
-    "beautifulsoup4>=4.12.0",
-    "python-dotenv>=1.0.0",
-    "fastmcp>=2.0.0",
+    "playwright>=1.52.0",
+    "typer>=0.16.0",
+    "rich>=14.0.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.11.7",
+    "beautifulsoup4>=4.13.4",
+    "python-dotenv>=1.1.0",
+    "fastmcp>=2.8.0",
     "ollama>=0.5.1",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.0.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
-    "mypy>=1.0.0",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.2.1",
+    "black>=25.1.0",
+    "isort>=6.0.1",
+    "flake8>=7.2.0",
+    "mypy>=1.16.0",
+    "ruff>=0.11.13",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -58,10 +66,10 @@ packages = ["swarm"]
 swarm = "swarm.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/swarm"
-Repository = "https://github.com/yourusername/swarm"
-Issues = "https://github.com/yourusername/swarm/issues"
-Documentation = "https://github.com/yourusername/swarm#readme"
+Homepage = "https://github.com/cyborgoat/swarm"
+Repository = "https://github.com/cyborgoat/swarm"
+Issues = "https://github.com/cyborgoat/swarm/issues"
+Documentation = "https://github.com/cyborgoat/swarm#readme"
 
 [tool.black]
 line-length = 100
@@ -77,8 +85,25 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E501"] # Ignore line length errors
+
 [dependency-groups]
-dev = [
-    "pytest>=8.4.0",
-    "pytest-asyncio>=1.0.0",
-]
+dev = ["pytest>=8.4.0", "pytest-asyncio>=1.0.0"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+# Enable Pyflakes (F) and pycodestyle (E, W) error rules by default.
+# 'I' enables isort's import sorting rules.
+# Add more rule codes as you see fit.
+select = ["E", "F", "I", "W", "UP"]
+ignore = []
+
+# Allow autofix for all enabled rules (when using --fix).
+fixable = ["ALL"]
+
+[tool.ruff.format]
+# Use black-compatible formatting.
+quote-style = "double"

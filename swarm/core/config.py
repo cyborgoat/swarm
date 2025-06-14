@@ -3,7 +3,7 @@ Configuration management for Swarm.
 """
 
 import os
-from typing import Optional
+
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
@@ -13,17 +13,17 @@ load_dotenv()
 
 class LLMConfig(BaseModel):
     """Configuration for LLM integration."""
-    
+
     base_url: str = Field(default="http://localhost:11434")
     model: str = Field(default="llama3.2:latest")
-    api_key: Optional[str] = Field(default=None)
+    api_key: str | None = Field(default=None)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=8192, gt=0)
 
 
 class BrowserConfig(BaseModel):
     """Configuration for browser automation."""
-    
+
     headless: bool = Field(default=False)
     timeout: int = Field(default=60000)
     viewport_width: int = Field(default=1280)
@@ -32,28 +32,28 @@ class BrowserConfig(BaseModel):
 
 class SearchConfig(BaseModel):
     """Configuration for web search."""
-    
+
     engine: str = Field(default="duckduckgo")
     results_limit: int = Field(default=10, gt=0)
 
 
 class LoggingConfig(BaseModel):
     """Configuration for logging."""
-    
+
     level: str = Field(default="INFO")
     file: str = Field(default="swarm.log")
 
 
 class PerformanceConfig(BaseModel):
     """Configuration for performance settings."""
-    
+
     max_concurrent_requests: int = Field(default=5, gt=0)
     request_timeout: int = Field(default=120, gt=0)
 
 
 class ResearchConfig(BaseModel):
     """Configuration for research behavior."""
-    
+
     include_images: bool = Field(default=True)
     max_sources: int = Field(default=8, gt=0)
     content_limit: int = Field(default=4096, gt=0)
@@ -66,14 +66,14 @@ class ResearchConfig(BaseModel):
 
 class Config(BaseModel):
     """Main configuration class for Swarm."""
-    
+
     llm: LLMConfig = Field(default_factory=LLMConfig)
     browser: BrowserConfig = Field(default_factory=BrowserConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
-    
+
     @classmethod
     def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
@@ -113,4 +113,4 @@ class Config(BaseModel):
                 max_retry_attempts=int(os.getenv("RESEARCH_MAX_RETRY_ATTEMPTS", "2")),
                 output_language=os.getenv("RESEARCH_OUTPUT_LANGUAGE", "english"),
             ),
-        ) 
+        )

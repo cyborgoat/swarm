@@ -3,6 +3,7 @@
 import os
 import signal
 import sys
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -32,10 +33,10 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
     # Set up signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     # Set environment variable to indicate MCP tools are being used
     os.environ["SWARM_USE_MCP"] = "true"
-    
+
     console.print(
         Panel(
             Text.assemble(
@@ -49,18 +50,18 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
             border_style="blue",
         )
     )
-    
+
     try:
         mcp_server = create_mcp_server(config)
         console.print("[green]🚀 Consolidated MCP Server starting...[/green]")
-        
+
         if verbose:
             # Show available tools in a compact table
             table = Table(show_header=True, header_style="bold magenta")
             table.add_column("Tool Name", style="cyan", no_wrap=True)
             table.add_column("Description", style="white")
             table.add_column("Category", style="yellow")
-            
+
             tools_info = [
                 ("start_browser_session", "Start persistent browser session", "Session"),
                 ("close_browser_session", "Close browser and cleanup", "Session"),
@@ -73,22 +74,22 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
                 ("get_page_elements", "Get clickable elements", "Content"),
                 ("take_screenshot", "Take page screenshot", "Content"),
             ]
-            
+
             for tool_name, description, category in tools_info:
                 table.add_row(tool_name, description, category)
-            
-            console.print(f"\n[bold cyan]Available MCP Tools:[/bold cyan]")
+
+            console.print("\n[bold cyan]Available MCP Tools:[/bold cyan]")
             console.print(table)
             console.print(f"[dim]Total: {len(tools_info)} tools available[/dim]")
-        
-        console.print(f"\n[bold green]✅ Consolidated MCP Server is running![/bold green]")
+
+        console.print("\n[bold green]✅ Consolidated MCP Server is running![/bold green]")
         console.print("[cyan]🔗 LLMs connect via stdio transport[/cyan]")
         console.print("[yellow]💡 Press Ctrl+C to stop[/yellow]")
-        
+
         if verbose:
             console.print("\n[bold cyan]Integration Examples:[/bold cyan]")
             console.print('[dim]Claude Desktop: "swarm-browser": {"command": "uv", "args": ["run", "swarm", "mcp-server"]}[/dim]')
-        
+
         # Configure logging for MCP server
         import logging
         logging.basicConfig(
@@ -97,10 +98,10 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
         )
         logger = logging.getLogger(__name__)
         logger.info("🚀 Consolidated MCP Server configured with logging")
-        
+
         # Run the server (stdio transport) - this blocks until interrupted
         mcp_server.run()
-        
+
     except KeyboardInterrupt:
         console.print("\n[yellow]🛑 MCP Server stopped by user[/yellow]")
     except Exception as e:
@@ -109,4 +110,4 @@ def handle_mcp_server(config: Config, port: int = 8000, verbose: bool = False) -
             import traceback
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
     finally:
-        console.print("[green]Thanks for using Swarm! 🐝[/green]") 
+        console.print("[green]Thanks for using Swarm! 🐝[/green]")

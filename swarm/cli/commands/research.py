@@ -3,7 +3,7 @@ Research command - Thin wrapper around the research module.
 """
 
 import asyncio
-from typing import Optional
+
 from rich.console import Console
 from rich.panel import Panel
 
@@ -17,7 +17,7 @@ async def handle_research_async(
     config: Config,
     query: str,
     max_results: int = 8,
-    output_file: Optional[str] = None,
+    output_file: str | None = None,
     verbose: bool = False,
     headless: bool = True,
     include_images: bool = True
@@ -36,27 +36,27 @@ async def handle_research_async(
     """
     # Override browser headless setting
     config.browser.headless = headless
-    
+
     # Initialize research assistant
     research_assistant = ResearchAssistant(
         config=config,
         verbose=verbose,
         include_images=include_images
     )
-    
+
     try:
         # Conduct research
         research_data = await research_assistant.conduct_research(
             query=query,
             max_sources=max_results
         )
-        
+
         # Display results
         research_assistant.display_results(research_data)
-        
+
         # Generate markdown report
         markdown_report = research_assistant.generate_markdown_report(research_data)
-        
+
         # Save results
         if output_file:
             # User provided filename
@@ -67,13 +67,13 @@ async def handle_research_async(
             # Auto-generate filename
             save_filename = research_assistant.get_auto_filename()
             console.print(f"[dim]📝 Auto-generating filename: {save_filename}[/dim]")
-        
+
         # Write markdown report to file
         with open(save_filename, 'w', encoding='utf-8') as f:
             f.write(markdown_report)
-        
+
         console.print(f"[green]💾 Report saved to: {save_filename}[/green]")
-        
+
         # Display final completion message
         analysis_results = research_data.get('analysis_results', [])
         console.print(Panel.fit(
@@ -86,7 +86,7 @@ async def handle_research_async(
             title="🏆 Mission Accomplished",
             border_style="green"
         ))
-        
+
     except Exception as e:
         console.print(f"[red]❌ Research failed: {str(e)}[/red]")
         if verbose:
@@ -101,7 +101,7 @@ def handle_research(
     config: Config,
     query: str,
     max_results: int = 8,
-    output_file: Optional[str] = None,
+    output_file: str | None = None,
     verbose: bool = False,
     headless: bool = True,
     include_images: bool = True
@@ -128,7 +128,7 @@ def handle_research(
 # Direct execution support
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Swarm Research Assistant")
     parser.add_argument("query", help="Research query")
     parser.add_argument("--max-results", type=int, default=5, help="Maximum sources to analyze")
@@ -136,9 +136,9 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", action="store_true", help="Show detailed progress")
     parser.add_argument("--headless", action="store_true", default=True, help="Run browser in headless mode")
     parser.add_argument("--include-images", action="store_true", default=True, help="Include image detection")
-    
+
     args = parser.parse_args()
-    
+
     config = Config.from_env()
     handle_research(
         config=config,
@@ -148,4 +148,4 @@ if __name__ == "__main__":
         verbose=args.verbose,
         headless=args.headless,
         include_images=args.include_images
-    ) 
+    )

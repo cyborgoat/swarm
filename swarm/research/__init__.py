@@ -11,4 +11,4 @@ This module provides comprehensive research capabilities with:
 from .assistant import ResearchAssistant
 from .formatter import ResearchFormatter
 
-__all__ = ['ResearchAssistant', 'ResearchFormatter'] 
+__all__ = ['ResearchAssistant', 'ResearchFormatter']

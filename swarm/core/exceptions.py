@@ -5,7 +5,7 @@ Custom exceptions for Swarm.
 
 class SwarmError(Exception):
     """Base exception for all Swarm errors."""
-    
+
     def __init__(self, message: str, details: str = "") -> None:
         self.message = message
         self.details = details
@@ -34,4 +34,4 @@ class ConfigError(SwarmError):
 
 class ValidationError(SwarmError):
     """Exception raised for validation errors."""
-    pass 
+    pass

@@ -3,8 +3,7 @@ Helper functions for Swarm.
 """
 
 import re
-from urllib.parse import urlparse, urljoin
-from typing import Optional
+from urllib.parse import urlparse
 
 
 def sanitize_url(url: str) -> str:
@@ -20,14 +19,14 @@ def sanitize_url(url: str) -> str:
     # Add protocol if missing
     if not url.startswith(('http://', 'https://')):
         url = 'https://' + url
-    
+
     # Parse and reconstruct URL
     parsed = urlparse(url)
-    
+
     # Basic validation
     if not parsed.netloc:
         raise ValueError(f"Invalid URL: {url}")
-    
+
     return url
 
 
@@ -60,10 +59,10 @@ def clean_text(text: str) -> str:
     """
     # Remove extra whitespace
     text = re.sub(r'\s+', ' ', text)
-    
+
     # Remove non-printable characters
     text = re.sub(r'[^\x20-\x7E]', '', text)
-    
+
     return text.strip()
 
 
@@ -81,7 +80,7 @@ def truncate_text(text: str, max_length: int, suffix: str = "...") -> str:
     """
     if len(text) <= max_length:
         return text
-    
+
     return text[:max_length - len(suffix)] + suffix
 
 
@@ -111,13 +110,13 @@ def format_file_size(size_bytes: int) -> str:
     """
     if size_bytes == 0:
         return "0 B"
-    
+
     size_names = ["B", "KB", "MB", "GB", "TB"]
     i = 0
     size = float(size_bytes)
-    
+
     while size >= 1024.0 and i < len(size_names) - 1:
         size /= 1024.0
         i += 1
-    
-    return f"{size:.1f} {size_names[i]}" 
+
+    return f"{size:.1f} {size_names[i]}"

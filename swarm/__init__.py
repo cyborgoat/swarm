@@ -9,4 +9,4 @@ __description__ = "A comprehensive CLI based agent for web browsing, testing, an
 from swarm.core.config import Config
 from swarm.core.exceptions import SwarmError
 
-__all__ = ["Config", "SwarmError", "__version__"] 
+__all__ = ["Config", "SwarmError", "__version__"]

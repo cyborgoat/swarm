@@ -2,17 +2,17 @@
 Main CLI entry point for Swarm.
 """
 
+
 import typer
-from typing import Optional
 from rich.console import Console
-from rich.text import Text
 from rich.panel import Panel
+from rich.text import Text
 
 from swarm import __version__
-from swarm.core.config import Config
-from swarm.cli.commands.research import handle_research
 from swarm.cli.commands.interactive import handle_interactive
 from swarm.cli.commands.mcp_server import handle_mcp_server
+from swarm.cli.commands.research import handle_research
+from swarm.core.config import Config
 
 app = typer.Typer(
     name="swarm",
@@ -27,41 +27,41 @@ console = Console()
 def research(
     query: str = typer.Argument(..., help="Research query to investigate"),
     max_results: int = typer.Option(10, "--max-results", "-n", help="Maximum search results to analyze"),
-    output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Save results to file"),
+    output_file: str | None = typer.Option(None, "--output", "-o", help="Save results to file"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
     headless: bool = typer.Option(True, "--headless/--no-headless", help="Run browser in headless mode"),
-    context_size: Optional[int] = typer.Option(None, "--context-size", "-c", help="Override LLM context size (max tokens)"),
-    model: Optional[str] = typer.Option(None, "--model", "-m", help="Override LLM model (e.g., llama3.2:latest, gemma3:12b)"),
+    context_size: int | None = typer.Option(None, "--context-size", "-c", help="Override LLM context size (max tokens)"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Override LLM model (e.g., llama3.2:latest, gemma3:12b)"),
     include_images: bool = typer.Option(True, "--include-images/--no-images", help="Include images in research results"),
-    relevance_threshold: Optional[float] = typer.Option(None, "--relevance-threshold", "-r", help="Minimum relevance score threshold (default: 5.0)"),
-    min_word_count: Optional[int] = typer.Option(None, "--min-words", "-w", help="Minimum word count for content (default: 300)"),
-    deep_content_limit: Optional[int] = typer.Option(None, "--deep-content", "-d", help="Deep content extraction limit (default: 8192)"),
-    language: Optional[str] = typer.Option(None, "--language", "-l", help="Output language: english or chinese (default: english)"),
+    relevance_threshold: float | None = typer.Option(None, "--relevance-threshold", "-r", help="Minimum relevance score threshold (default: 5.0)"),
+    min_word_count: int | None = typer.Option(None, "--min-words", "-w", help="Minimum word count for content (default: 300)"),
+    deep_content_limit: int | None = typer.Option(None, "--deep-content", "-d", help="Deep content extraction limit (default: 8192)"),
+    language: str | None = typer.Option(None, "--language", "-l", help="Output language: english or chinese (default: english)"),
 ) -> None:
     """🔬 Research a topic using AI and web browsing."""
     config = Config.from_env()
-    
+
     # Override configuration with CLI parameters if provided
     if context_size:
         config.llm.max_tokens = context_size
         console.print(f"[dim]🔧 Using custom context size: {context_size} tokens[/dim]")
-    
+
     if model:
         config.llm.model = model
         console.print(f"[dim]🤖 Using custom model: {model}[/dim]")
-    
+
     if relevance_threshold is not None:
         config.research.relevance_threshold = relevance_threshold
         console.print(f"[dim]🎯 Using custom relevance threshold: {relevance_threshold}[/dim]")
-    
+
     if min_word_count is not None:
         config.research.min_word_count = min_word_count
         console.print(f"[dim]📝 Using custom minimum word count: {min_word_count}[/dim]")
-    
+
     if deep_content_limit is not None:
         config.research.deep_content_limit = deep_content_limit
         console.print(f"[dim]🔍 Using custom deep content limit: {deep_content_limit}[/dim]")
-    
+
     if language is not None:
         # Validate language parameter
         if language.lower() not in ["english", "chinese"]:
@@ -70,7 +70,7 @@ def research(
         config.research.output_language = language.lower()
         lang_display = "中文" if language.lower() == "chinese" else "English"
         console.print(f"[dim]🌐 Using language: {lang_display}[/dim]")
-    
+
     handle_research(config, query, max_results, output_file, verbose, headless, include_images)
 
 
@@ -82,10 +82,10 @@ def interactive(
 ) -> None:
     """🎯 Start interactive research assistant."""
     config = Config.from_env()
-    
+
     if verbose:
         console.print(f"[dim]Starting interactive mode with MCP: {use_mcp}, Headless: {headless}[/dim]")
-    
+
     handle_interactive(config, use_mcp=use_mcp, headless=headless, verbose=verbose)
 
 
@@ -129,4 +129,4 @@ def info() -> None:
 
 
 if __name__ == "__main__":
-    app() 
+    app()

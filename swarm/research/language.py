@@ -2,14 +2,13 @@
 Language Support - Handles internationalization for research output.
 """
 
-from typing import Dict, Any
 
 # Language translations for UI elements
 TRANSLATIONS = {
     "english": {
         "research_report": "Research Report",
         "generated": "Generated",
-        "model": "Model", 
+        "model": "Model",
         "context_size": "Context Size",
         "sources_analyzed": "Sources Analyzed",
         "images_found": "Images Found",
@@ -30,7 +29,7 @@ TRANSLATIONS = {
         "depth_legend": "Depth Legend: N/N=Normal, D/N=Deep Extract, N/E=Enhanced Analysis, D/E=Deep+Enhanced",
         "relevance_distribution": "Relevance Distribution",
         "high": "High",
-        "medium": "Medium", 
+        "medium": "Medium",
         "low": "Low",
         "research_complete": "Research Complete!",
         "sources_found": "Sources Found",
@@ -41,7 +40,7 @@ TRANSLATIONS = {
         "research_report": "研究报告",
         "generated": "生成时间",
         "model": "模型",
-        "context_size": "上下文大小", 
+        "context_size": "上下文大小",
         "sources_analyzed": "已分析来源",
         "images_found": "发现图片",
         "executive_summary": "执行摘要",
@@ -61,7 +60,7 @@ TRANSLATIONS = {
         "depth_legend": "深度图例: N/N=正常, D/N=深度提取, N/E=增强分析, D/E=深度+增强",
         "relevance_distribution": "相关性分布",
         "high": "高",
-        "medium": "中", 
+        "medium": "中",
         "low": "低",
         "research_complete": "研究完成！",
         "sources_found": "发现来源",
@@ -193,28 +192,28 @@ Keep response focused and under 500 words.
 
 class LanguageHelper:
     """Helper class for multi-language support in research output."""
-    
+
     def __init__(self, language: str = "english"):
         self.language = language.lower()
         if self.language not in TRANSLATIONS:
             self.language = "english"  # Fallback to English
-    
+
     def get_text(self, key: str) -> str:
         """Get translated text for a given key."""
         return TRANSLATIONS[self.language].get(key, TRANSLATIONS["english"].get(key, key))
-    
+
     def get_prompt(self, prompt_type: str, **kwargs) -> str:
         """Get language-specific LLM prompt with formatting."""
         template = LLM_PROMPTS[self.language].get(
-            prompt_type, 
+            prompt_type,
             LLM_PROMPTS["english"].get(prompt_type, "")
         )
         return template.format(**kwargs)
-    
+
     def is_chinese(self) -> bool:
         """Check if current language is Chinese."""
         return self.language == "chinese"
-    
+
     def get_language_display(self) -> str:
         """Get display name for current language."""
-        return "中文" if self.is_chinese() else "English" 
+        return "中文" if self.is_chinese() else "English"
