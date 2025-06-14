@@ -1,36 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "swarm"
-version = "0.1.0"
-description = "A comprehensive platform for multi-LLM integration and canvas-like applications"
+name = "swarm-browser"
+version = "2.0.0"
+description = "A comprehensive CLI-based agent for web browsing, automation, and AI-powered research"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Junxiao Guo", email = "junxiao.guo@example.com"},
+]
+keywords = ["cli", "web-automation", "llm", "research", "browsing", "mcp", "playwright", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Researchers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Text Processing :: Markup :: HTML",
+]
+
 dependencies = [
-    # Core dependencies for LLM module
-    "openai>=1.30.0",
-    "anthropic>=0.25.0",
-    "google-generativeai>=0.5.0",
-    # Image processing for multimodal (optional)
-    "Pillow>=10.0.0",
-    # Data handling
+    "playwright>=1.40.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "httpx>=0.24.0",
     "pydantic>=2.0.0",
-    # Async support
-    "aiohttp>=3.8.0",
-    "python-dotenv>=1.1.0",
-    # Web browsing and analysis
-    "requests>=2.25.0",
-    "beautifulsoup4>=4.9.0",
-    "dashscope>=1.16.0", # For Qwen models via DashScope
-    "selenium>=4.0.0",
-    "webdriver-manager>=4.0.0",
+    "beautifulsoup4>=4.12.0",
+    "python-dotenv>=1.0.0",
+    "fastmcp>=2.0.0",
+    "ollama>=0.5.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
     "black>=23.0.0",
-    "ruff>=0.1.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
 ]
 
 [project.scripts]
-swarm = "swarm.main:main"
+swarm = "swarm.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/swarm"
+Repository = "https://github.com/yourusername/swarm"
+Issues = "https://github.com/yourusername/swarm/issues"
+Documentation = "https://github.com/yourusername/swarm#readme"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+]

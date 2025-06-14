@@ -1,15 +1,12 @@
 """
-Swarm - A comprehensive platform for multi-LLM integration and canvas-like applications.
+Swarm - A comprehensive CLI-based agent for web browsing and automation with LLM integration.
 """
 
-# Import LLM module for easy access
-try:
-    from . import llm
-    from .llm import LLMFactory
-except ImportError:
-    # LLM module might not be available if dependencies aren't installed
-    llm = None
-    LLMFactory = None
-
 __version__ = "0.1.0"
-__all__ = ["llm", "LLMFactory"] 
+__author__ = "Swarm Team"
+__description__ = "A comprehensive CLI based agent for web browsing, testing, and automation with LLM integration"
+
+from swarm.core.config import Config
+from swarm.core.exceptions import SwarmError
+
+__all__ = ["Config", "SwarmError", "__version__"] 

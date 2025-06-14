@@ -176,6 +176,35 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Project-specific ignores
 .cursor/
-uv.lock
 .DS_Store
+
+# Swarm application output files
+research_*.txt
+research_*.md
+*.research
+swarm.log
+*.log
+
+# Browser automation artifacts
+playwright-report/
+test-results/
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.pdf
+
+# Development and testing artifacts
+CONSOLIDATED_*.md
+*_SUMMARY.md
+*_test.py
+demo_*.py
+test_*.txt
+temp_*.py
+scratch_*.py
+
+# MCP server artifacts
+mcp_*.json
+server_*.log
