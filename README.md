@@ -19,7 +19,7 @@ A comprehensive CLI-based agent for web browsing, automation, and deep research 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/swarm.git
+git clone https://github.com/cyborgoat/swarm.git
 cd swarm
 
 # Install dependencies with UV
