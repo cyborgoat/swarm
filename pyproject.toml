@@ -16,7 +16,7 @@ keywords = ["cli", "web-automation", "llm", "research", "browsing", "mcp", "play
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "Intended Audience :: Researchers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -50,6 +50,9 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.0.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["swarm"]
 
 [project.scripts]
 swarm = "swarm.cli.main:app"

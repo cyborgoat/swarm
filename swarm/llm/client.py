@@ -31,7 +31,7 @@ class LLMClient:
         )
         
         # Add API key if provided
-        if self.config.api_key:
+        if hasattr(self.config, 'api_key') and self.config.api_key:
             self.session.headers['Authorization'] = f'Bearer {self.config.api_key}'
     
     def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
@@ -54,6 +54,19 @@ class LLMClient:
                 return self._try_openai_api(prompt, system_prompt)
             except Exception as openai_error:
                 raise LLMError(f"Both Ollama and OpenAI APIs failed. Ollama: {ollama_error}, OpenAI: {openai_error}")
+    
+    async def generate_async(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """
+        Async version of generate for compatibility with async analyzers.
+        
+        Args:
+            prompt: User prompt
+            system_prompt: Optional system prompt
+            
+        Returns:
+            Generated text response
+        """
+        return self.generate(prompt, system_prompt)
     
     def generate_with_functions(
         self, 
@@ -117,12 +130,12 @@ class LLMClient:
         try:
             # Use official ollama package
             response = ollama.chat(
-                model='llama3.2:latest',  # Use the available model
+                model=getattr(self.config, 'model', 'llama3.2:latest'),
                 messages=messages,
                 tools=tools,
                 options={
-                    'temperature': self.config.temperature,
-                    'num_predict': self.config.max_tokens
+                    'temperature': getattr(self.config, 'temperature', 0.7),
+                    'num_predict': getattr(self.config, 'max_tokens', 8192)
                 }
             )
             
@@ -159,18 +172,18 @@ class LLMClient:
             full_prompt = f"{system_prompt}\n\nUser: {prompt}"
         
         payload = {
-            'model': self.config.model,
+            'model': getattr(self.config, 'model', 'llama3.2:latest'),
             'prompt': full_prompt,
             'stream': False,
             'options': {
-                'temperature': self.config.temperature,
-                'num_predict': self.config.max_tokens
+                'temperature': getattr(self.config, 'temperature', 0.7),
+                'num_predict': getattr(self.config, 'max_tokens', 8192)
             }
         }
         
         try:
             response = self.session.post(
-                f"{self.config.base_url}/api/generate",
+                f"{getattr(self.config, 'base_url', 'http://localhost:11434')}/api/generate",
                 json=payload
             )
             response.raise_for_status()
@@ -188,14 +201,14 @@ class LLMClient:
         messages.append({'role': 'user', 'content': prompt})
         
         payload = {
-            'model': self.config.model,
+            'model': getattr(self.config, 'model', 'llama3.2:latest'),
             'messages': messages,
-            'temperature': self.config.temperature,
-            'max_tokens': self.config.max_tokens
+            'temperature': getattr(self.config, 'temperature', 0.7),
+            'max_tokens': getattr(self.config, 'max_tokens', 8192)
         }
         
         response = self.session.post(
-            f"{self.config.base_url}/v1/chat/completions",
+            f"{getattr(self.config, 'base_url', 'http://localhost:11434')}/v1/chat/completions",
             json=payload
         )
         response.raise_for_status()
@@ -220,18 +233,18 @@ class LLMClient:
         messages.append({'role': 'user', 'content': prompt})
         
         payload = {
-            'model': self.config.model,
+            'model': getattr(self.config, 'model', 'llama3.2:latest'),
             'messages': messages,
             'functions': functions,
-            'temperature': self.config.temperature,
-            'max_tokens': self.config.max_tokens
+            'temperature': getattr(self.config, 'temperature', 0.7),
+            'max_tokens': getattr(self.config, 'max_tokens', 8192)
         }
         
         if function_call:
             payload['function_call'] = function_call
         
         response = self.session.post(
-            f"{self.config.base_url}/v1/chat/completions",
+            f"{getattr(self.config, 'base_url', 'http://localhost:11434')}/v1/chat/completions",
             json=payload
         )
         response.raise_for_status()

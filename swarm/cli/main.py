@@ -30,10 +30,48 @@ def research(
     output_file: Optional[str] = typer.Option(None, "--output", "-o", help="Save results to file"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress"),
     headless: bool = typer.Option(True, "--headless/--no-headless", help="Run browser in headless mode"),
+    context_size: Optional[int] = typer.Option(None, "--context-size", "-c", help="Override LLM context size (max tokens)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Override LLM model (e.g., llama3.2:latest, gemma3:12b)"),
+    include_images: bool = typer.Option(True, "--include-images/--no-images", help="Include images in research results"),
+    relevance_threshold: Optional[float] = typer.Option(None, "--relevance-threshold", "-r", help="Minimum relevance score threshold (default: 5.0)"),
+    min_word_count: Optional[int] = typer.Option(None, "--min-words", "-w", help="Minimum word count for content (default: 300)"),
+    deep_content_limit: Optional[int] = typer.Option(None, "--deep-content", "-d", help="Deep content extraction limit (default: 8192)"),
+    language: Optional[str] = typer.Option(None, "--language", "-l", help="Output language: english or chinese (default: english)"),
 ) -> None:
     """🔬 Research a topic using AI and web browsing."""
     config = Config.from_env()
-    handle_research(config, query, max_results, output_file, verbose, headless)
+    
+    # Override configuration with CLI parameters if provided
+    if context_size:
+        config.llm.max_tokens = context_size
+        console.print(f"[dim]🔧 Using custom context size: {context_size} tokens[/dim]")
+    
+    if model:
+        config.llm.model = model
+        console.print(f"[dim]🤖 Using custom model: {model}[/dim]")
+    
+    if relevance_threshold is not None:
+        config.research.relevance_threshold = relevance_threshold
+        console.print(f"[dim]🎯 Using custom relevance threshold: {relevance_threshold}[/dim]")
+    
+    if min_word_count is not None:
+        config.research.min_word_count = min_word_count
+        console.print(f"[dim]📝 Using custom minimum word count: {min_word_count}[/dim]")
+    
+    if deep_content_limit is not None:
+        config.research.deep_content_limit = deep_content_limit
+        console.print(f"[dim]🔍 Using custom deep content limit: {deep_content_limit}[/dim]")
+    
+    if language is not None:
+        # Validate language parameter
+        if language.lower() not in ["english", "chinese"]:
+            console.print(f"[red]❌ Invalid language: {language}. Must be 'english' or 'chinese'[/red]")
+            raise typer.Exit(1)
+        config.research.output_language = language.lower()
+        lang_display = "中文" if language.lower() == "chinese" else "English"
+        console.print(f"[dim]🌐 Using language: {lang_display}[/dim]")
+    
+    handle_research(config, query, max_results, output_file, verbose, headless, include_images)
 
 
 @app.command()

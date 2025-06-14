@@ -51,6 +51,19 @@ class PerformanceConfig(BaseModel):
     request_timeout: int = Field(default=120, gt=0)
 
 
+class ResearchConfig(BaseModel):
+    """Configuration for research behavior."""
+    
+    include_images: bool = Field(default=True)
+    max_sources: int = Field(default=8, gt=0)
+    content_limit: int = Field(default=4096, gt=0)
+    relevance_threshold: float = Field(default=5.0, ge=0.0)
+    min_word_count: int = Field(default=300, gt=0)
+    deep_content_limit: int = Field(default=8192, gt=0)
+    max_retry_attempts: int = Field(default=2, ge=0)
+    output_language: str = Field(default="english", pattern="^(english|chinese)$")
+
+
 class Config(BaseModel):
     """Main configuration class for Swarm."""
     
@@ -59,6 +72,7 @@ class Config(BaseModel):
     search: SearchConfig = Field(default_factory=SearchConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    research: ResearchConfig = Field(default_factory=ResearchConfig)
     
     @classmethod
     def from_env(cls) -> "Config":
@@ -88,5 +102,15 @@ class Config(BaseModel):
             performance=PerformanceConfig(
                 max_concurrent_requests=int(os.getenv("MAX_CONCURRENT_REQUESTS", "5")),
                 request_timeout=int(os.getenv("REQUEST_TIMEOUT", "120")),
+            ),
+            research=ResearchConfig(
+                include_images=os.getenv("RESEARCH_INCLUDE_IMAGES", "true").lower() == "true",
+                max_sources=int(os.getenv("RESEARCH_MAX_SOURCES", "8")),
+                content_limit=int(os.getenv("RESEARCH_CONTENT_LIMIT", "4096")),
+                relevance_threshold=float(os.getenv("RESEARCH_RELEVANCE_THRESHOLD", "5.0")),
+                min_word_count=int(os.getenv("RESEARCH_MIN_WORD_COUNT", "300")),
+                deep_content_limit=int(os.getenv("RESEARCH_DEEP_CONTENT_LIMIT", "8192")),
+                max_retry_attempts=int(os.getenv("RESEARCH_MAX_RETRY_ATTEMPTS", "2")),
+                output_language=os.getenv("RESEARCH_OUTPUT_LANGUAGE", "english"),
             ),
         ) 

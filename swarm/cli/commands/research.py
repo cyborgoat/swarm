@@ -1,4 +1,6 @@
-"""Enhanced Research command for comprehensive topic investigation with detailed progress reporting."""
+"""
+Research command - Thin wrapper around the research module.
+"""
 
 import asyncio
 from typing import Optional
@@ -6,10 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from swarm.core.config import Config
-from swarm.web.browser import Browser
-from swarm.web.search import WebSearch
-from swarm.llm.client import LLMClient
-from swarm.cli.commands.research_assistant import EnhancedResearchAssistant
+from swarm.research import ResearchAssistant
 
 console = Console()
 
@@ -20,96 +19,82 @@ async def handle_research_async(
     max_results: int = 8,
     output_file: Optional[str] = None,
     verbose: bool = False,
-    headless: bool = True
+    headless: bool = True,
+    include_images: bool = True
 ) -> None:
     """
-    Conduct comprehensive research on a topic with detailed step-by-step analysis.
+    Conduct comprehensive research on a topic.
     
     Args:
         config: Application configuration
         query: Research query
-        max_results: Maximum search results to analyze (default: 8)
-        output_file: Optional file to save results
+        max_results: Maximum search results to analyze
+        output_file: Optional file to save results (auto-generates if None)
         verbose: Show detailed progress
         headless: Run browser in headless mode
+        include_images: Include image detection functionality
     """
-    console.print(
-        Panel(
-            f"🔬 [bold cyan]Enhanced Research Assistant[/bold cyan]\n"
-            f"📋 Query: [yellow]{query}[/yellow]\n"
-            f"🎯 Max Sources: {max_results}\n"
-            f"💾 Output File: {output_file or 'Console only'}\n"
-            f"🔧 Mode: {'Headless' if headless else 'Visible'} Browser\n"
-            f"📊 Verbose: {'Enabled' if verbose else 'Disabled'}",
-            title="🤖 Research Configuration",
-            border_style="blue",
-        )
+    # Override browser headless setting
+    config.browser.headless = headless
+    
+    # Initialize research assistant
+    research_assistant = ResearchAssistant(
+        config=config,
+        verbose=verbose,
+        include_images=include_images
     )
     
     try:
-        # Initialize components with enhanced configuration
-        browser_config = config.browser
-        browser_config.headless = headless
-        
-        console.print("[dim]🔧 Initializing research components...[/dim]")
-        
-        browser = Browser(browser_config)
-        search = WebSearch(config.search)
-        llm_client = LLMClient(config.llm)
-        
-        # Create enhanced research assistant
-        research_assistant = EnhancedResearchAssistant(
-            browser=browser,
-            search=search,
-            llm_client=llm_client,
-            verbose=verbose,
-            use_mcp=False  # Direct browser usage for research command
-        )
-        
-        if verbose:
-            console.print("[dim]✅ All components initialized successfully[/dim]")
-        
-        # Conduct comprehensive research
-        console.print("\n" + "="*80)
-        console.print("[bold green]🚀 Starting Enhanced Research Process[/bold green]")
-        console.print("="*80 + "\n")
-        
-        research_results = await research_assistant.conduct_comprehensive_research(
+        # Conduct research
+        research_data = await research_assistant.conduct_research(
             query=query,
             max_sources=max_results
         )
         
-        # Save results to file if requested
-        if output_file:
-            await save_research_results(research_results, output_file, query)
-            console.print(f"\n[green]💾 Complete research results saved to: {output_file}[/green]")
+        # Display results
+        research_assistant.display_results(research_data)
         
-        # Display final statistics
-        console.print("\n" + "="*80)
+        # Generate markdown report
+        markdown_report = research_assistant.generate_markdown_report(research_data)
+        
+        # Save results
+        if output_file:
+            # User provided filename
+            if not output_file.endswith('.md'):
+                output_file += '.md'
+            save_filename = output_file
+        else:
+            # Auto-generate filename
+            save_filename = research_assistant.get_auto_filename()
+            console.print(f"[dim]📝 Auto-generating filename: {save_filename}[/dim]")
+        
+        # Write markdown report to file
+        with open(save_filename, 'w', encoding='utf-8') as f:
+            f.write(markdown_report)
+        
+        console.print(f"[green]💾 Report saved to: {save_filename}[/green]")
+        
+        # Display final completion message
+        analysis_results = research_data.get('analysis_results', [])
         console.print(Panel.fit(
-            f"✅ [bold green]Research Mission Accomplished![/bold green]\n\n"
-            f"📊 [bold]Final Statistics:[/bold]\n"
-            f"🔍 Search Results Found: {len(research_results.get('search_results', []))}\n"
-            f"📄 Sources Successfully Analyzed: {len(research_results.get('analyzed_sources', []))}\n"
-            f"💡 Key Findings Extracted: {len(research_results.get('key_findings', []))}\n"
-            f"🎯 Themes Identified: {len(research_results.get('intermediate_summaries', []))}\n"
-            f"📝 Final Report: {'Generated' if research_results.get('final_summary') else 'Failed'}\n"
-            f"💾 Saved to File: {'Yes' if output_file else 'No'}",
-            title="🏆 Research Complete",
+            f"✅ [bold green]Research Complete![/bold green]\n"
+            f"📊 Sources analyzed: {len(analysis_results)}\n"
+            f"🎯 High relevance sources: {sum(1 for r in analysis_results if r.relevance_score >= config.research.relevance_threshold)}\n"
+            f"🖼️ Images found: {len(research_data.get('images_found', []))}\n"
+            f"🌐 Language: {config.research.output_language}\n"
+            f"📝 Report saved: {save_filename}",
+            title="🏆 Mission Accomplished",
             border_style="green"
         ))
-        
-        # Cleanup
-        if hasattr(browser, '_session_active') and browser._session_active:
-            await browser.close_session()
-            if verbose:
-                console.print("[dim]🧹 Browser session closed[/dim]")
         
     except Exception as e:
         console.print(f"[red]❌ Research failed: {str(e)}[/red]")
         if verbose:
             import traceback
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
+    finally:
+        # Cleanup
+        await research_assistant.cleanup()
 
 
 def handle_research(
@@ -118,28 +103,21 @@ def handle_research(
     max_results: int = 8,
     output_file: Optional[str] = None,
     verbose: bool = False,
-    headless: bool = True
+    headless: bool = True,
+    include_images: bool = True
 ) -> None:
     """
-    Synchronous wrapper for the enhanced research function.
-    
-    Args:
-        config: Application configuration
-        query: Research query
-        max_results: Maximum search results to analyze
-        output_file: Optional file to save results
-        verbose: Show detailed progress
-        headless: Run browser in headless mode
+    Synchronous wrapper for research function.
     """
     try:
-        # Run the async research function
         asyncio.run(handle_research_async(
             config=config,
             query=query,
             max_results=max_results,
             output_file=output_file,
             verbose=verbose,
-            headless=headless
+            headless=headless,
+            include_images=include_images
         ))
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠️ Research interrupted by user[/yellow]")
@@ -147,114 +125,27 @@ def handle_research(
         console.print(f"[red]❌ Research execution failed: {str(e)}[/red]")
 
 
-async def save_research_results(research_data: dict, output_file: str, query: str) -> None:
-    """
-    Save comprehensive research results to file with detailed formatting.
-    
-    Args:
-        research_data: Complete research results
-        output_file: Path to output file
-        query: Original research query
-    """
-    try:
-        with open(output_file, 'w', encoding='utf-8') as f:
-            # Header
-            f.write("="*80 + "\n")
-            f.write(f"COMPREHENSIVE RESEARCH REPORT\n")
-            f.write("="*80 + "\n\n")
-            
-            f.write(f"Query: {query}\n")
-            f.write(f"Generated by: Enhanced Research Assistant\n")
-            f.write(f"Date: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            
-            # Executive Summary
-            f.write("EXECUTIVE SUMMARY\n")
-            f.write("-" * 40 + "\n")
-            if research_data.get('final_summary'):
-                f.write(research_data['final_summary'])
-                f.write("\n\n")
-            
-            # Research Statistics
-            f.write("RESEARCH STATISTICS\n")
-            f.write("-" * 40 + "\n")
-            f.write(f"Sources Found: {len(research_data.get('search_results', []))}\n")
-            f.write(f"Sources Analyzed: {len(research_data.get('analyzed_sources', []))}\n")
-            f.write(f"Key Findings: {len(research_data.get('key_findings', []))}\n")
-            f.write(f"Themes Identified: {len(research_data.get('intermediate_summaries', []))}\n\n")
-            
-            # Key Findings
-            if research_data.get('key_findings'):
-                f.write("KEY FINDINGS\n")
-                f.write("-" * 40 + "\n")
-                for i, finding in enumerate(research_data['key_findings'], 1):
-                    f.write(f"{i}. {finding['finding']}\n")
-                    f.write(f"   Source: {finding['source_title']}\n")
-                    f.write(f"   URL: {finding['source_url']}\n")
-                    f.write(f"   Relevance Score: {finding['relevance_score']:.1f}\n\n")
-            
-            # Theme Analysis
-            if research_data.get('intermediate_summaries'):
-                f.write("THEME ANALYSIS\n")
-                f.write("-" * 40 + "\n")
-                for theme_data in research_data['intermediate_summaries']:
-                    f.write(f"Theme: {theme_data['theme']}\n")
-                    f.write(f"Summary: {theme_data['summary']}\n")
-                    f.write(f"Supporting Sources: {theme_data['source_count']}\n\n")
-            
-            # Detailed Source Analysis
-            if research_data.get('analyzed_sources'):
-                f.write("DETAILED SOURCE ANALYSIS\n")
-                f.write("-" * 40 + "\n")
-                for i, source in enumerate(research_data['analyzed_sources'], 1):
-                    f.write(f"Source {i}: {source['title']}\n")
-                    f.write(f"URL: {source['url']}\n")
-                    f.write(f"Relevance Score: {source['relevance_score']:.1f}\n")
-                    f.write(f"Word Count: {source['word_count']}\n")
-                    f.write(f"Summary: {source['summary']}\n")
-                    f.write(f"Content Preview: {source['content'][:300]}...\n")
-                    f.write("-" * 60 + "\n\n")
-            
-            # All Search Results
-            if research_data.get('search_results'):
-                f.write("ALL SEARCH RESULTS\n")
-                f.write("-" * 40 + "\n")
-                for i, result in enumerate(research_data['search_results'], 1):
-                    f.write(f"{i}. {result.get('title', 'No title')}\n")
-                    f.write(f"   URL: {result.get('url', 'No URL')}\n")
-                    if result.get('description'):
-                        f.write(f"   Description: {result['description']}\n")
-                    f.write("\n")
-            
-            f.write("="*80 + "\n")
-            f.write("END OF REPORT\n")
-            f.write("="*80 + "\n")
-            
-    except Exception as e:
-        console.print(f"[red]❌ Failed to save results to file: {str(e)}[/red]")
-
-
+# Direct execution support
 if __name__ == "__main__":
     import argparse
     
-    # Set up command line arguments
-    parser = argparse.ArgumentParser(description="Enhanced Research Assistant")
+    parser = argparse.ArgumentParser(description="Swarm Research Assistant")
     parser.add_argument("query", help="Research query")
-    parser.add_argument("--limit", type=int, default=5, help="Maximum number of sources to analyze")
-    parser.add_argument("--output", help="Output file path")
+    parser.add_argument("--max-results", type=int, default=5, help="Maximum sources to analyze")
+    parser.add_argument("--output", help="Output file path (.md extension auto-added)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed progress")
     parser.add_argument("--headless", action="store_true", default=True, help="Run browser in headless mode")
+    parser.add_argument("--include-images", action="store_true", default=True, help="Include image detection")
     
     args = parser.parse_args()
     
-    # Load configuration
     config = Config.from_env()
-    
-    # Run research
     handle_research(
         config=config,
         query=args.query,
-        max_results=args.limit,
+        max_results=args.max_results,
         output_file=args.output,
         verbose=args.verbose,
-        headless=args.headless
+        headless=args.headless,
+        include_images=args.include_images
     ) 

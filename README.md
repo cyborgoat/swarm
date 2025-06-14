@@ -44,7 +44,7 @@ LLM_BASE_URL=http://localhost:11434
 LLM_MODEL=llama3.2:latest
 LLM_API_KEY=
 LLM_TEMPERATURE=0.7
-LLM_MAX_TOKENS=8192
+LLM_MAX_TOKENS=16384
 
 # Browser Configuration (set to false for interactive mode)
 BROWSER_HEADLESS=false
@@ -56,11 +56,21 @@ BROWSER_VIEWPORT_HEIGHT=720
 SEARCH_ENGINE=duckduckgo
 SEARCH_RESULTS_LIMIT=10
 
+# Research Configuration
+RESEARCH_INCLUDE_IMAGES=true
+RESEARCH_MAX_SOURCES=8
+RESEARCH_CONTENT_LIMIT=4096
+RESEARCH_RELEVANCE_THRESHOLD=5.0
+RESEARCH_MIN_WORD_COUNT=300
+RESEARCH_DEEP_CONTENT_LIMIT=8192
+RESEARCH_MAX_RETRY_ATTEMPTS=2
+RESEARCH_OUTPUT_LANGUAGE=english
+
 # Logging Configuration
 LOG_LEVEL=INFO
 LOG_FILE=swarm.log
 
-# Performance Settings
+# Performance Settings (increased for research tasks)
 MAX_CONCURRENT_REQUESTS=5
 REQUEST_TIMEOUT=120
 ```
@@ -73,13 +83,20 @@ Conduct comprehensive research with AI-powered analysis:
 
 ```bash
 # Basic research with 5 sources
-uv run python swarm/cli/commands/research.py "best gaming headsets 2024"
+swarm research "best gaming headsets 2024"
 
 # Advanced research with custom settings
-uv run python swarm/cli/commands/research.py "artificial intelligence trends" --limit 8 --output ai_research.txt --verbose
+swarm research "artificial intelligence trends" --max-results 8 --output ai_research.md --verbose
 
-# Research with visible browser (for debugging)
-uv run python swarm/cli/commands/research.py "python web frameworks" --limit 5 --verbose
+# Research with language support
+swarm research "人工智能趋势 2024" --language chinese --max-results 5
+swarm research "AI trends 2024" --language english --max-results 5
+
+# Research with custom model and context
+swarm research "machine learning" --model llama3.2:latest --context-size 16384
+
+# Research with custom relevance settings
+swarm research "deep learning" --relevance-threshold 6.0 --min-words 500
 ```
 
 **Research Features:**
@@ -87,6 +104,8 @@ uv run python swarm/cli/commands/research.py "python web frameworks" --limit 5 -
 - 📄 **Phase 2**: Source analysis with relevance scoring and content extraction
 - 🧠 **Phase 3**: Content synthesis with key findings and theme identification
 - 📝 **Phase 4**: Final report generation with structured summaries
+- 🌐 **Language Support**: English and Chinese output with auto-filename generation
+- 🎯 **Intelligence**: Adaptive depth analysis based on relevance thresholds
 
 #### Interactive Mode (Recommended)
 
@@ -283,6 +302,72 @@ fill_input_field("Email", "user@example.com")  # 🔧 MCP Tool: fill_input_field
 fill_input_field("Password", "secure_password")  # 🔧 MCP Tool: fill_input_field -> success
 select_dropdown_option("Country", "United States")  # 🔧 MCP Tool: select_dropdown_option -> success
 click_element("Create Account")  # 🔧 MCP Tool: click_element -> success
+```
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+All configuration is managed through environment variables in `.env`:
+
+> **Note**: Shell environment variables take precedence over `.env` file values. If you have `LLM_MODEL` set in your shell, unset it with `unset LLM_MODEL` to use the `.env` file value.
+
+```bash
+# LLM Configuration - Controls AI features
+LLM_BASE_URL=http://localhost:11434    # Ollama server URL
+LLM_MODEL=llama3.2:latest              # Model to use (configurable)
+LLM_API_KEY=                           # Optional API key
+LLM_TEMPERATURE=0.7                    # Response creativity (0.0-2.0)
+LLM_MAX_TOKENS=16384                   # Maximum context size
+
+# Research Configuration - Controls research behavior
+RESEARCH_INCLUDE_IMAGES=true           # Include image detection
+RESEARCH_MAX_SOURCES=8                 # Maximum sources to analyze
+RESEARCH_CONTENT_LIMIT=4096            # Content extraction limit
+RESEARCH_RELEVANCE_THRESHOLD=5.0       # Minimum relevance score
+RESEARCH_MIN_WORD_COUNT=300            # Minimum content words
+RESEARCH_DEEP_CONTENT_LIMIT=8192       # Deep extraction limit
+RESEARCH_MAX_RETRY_ATTEMPTS=2          # Retry attempts for low relevance
+RESEARCH_OUTPUT_LANGUAGE=english       # Output language (english/chinese)
+
+# Browser Configuration - Controls automation
+BROWSER_HEADLESS=false                 # Visible browser for debugging
+BROWSER_TIMEOUT=60000                  # Page load timeout (ms)
+BROWSER_VIEWPORT_WIDTH=1280            # Browser window width
+BROWSER_VIEWPORT_HEIGHT=720            # Browser window height
+```
+
+### Model Configuration
+
+The app respects your `LLM_MODEL` setting. Common models:
+
+```bash
+# Llama models
+LLM_MODEL=llama3.2:latest
+LLM_MODEL=llama3.2:3b
+LLM_MODEL=llama3.1:8b
+
+# Gemma models  
+LLM_MODEL=gemma2:9b
+LLM_MODEL=gemma2:27b
+
+# Qwen models
+LLM_MODEL=qwen2.5:7b
+LLM_MODEL=qwen2.5:14b
+```
+
+### Language Support
+
+Set output language for research reports:
+
+```bash
+# English output (default)
+RESEARCH_OUTPUT_LANGUAGE=english
+swarm research "AI trends" --language english
+
+# Chinese output
+RESEARCH_OUTPUT_LANGUAGE=chinese  
+swarm research "人工智能趋势" --language chinese
 ```
 
 ## 🔧 Development

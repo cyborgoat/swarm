@@ -208,3 +208,4 @@ scratch_*.py
 # MCP server artifacts
 mcp_*.json
 server_*.log
+*.txt

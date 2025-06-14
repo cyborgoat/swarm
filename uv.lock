@@ -927,8 +927,8 @@ wheels = [
 ]
 
 [[package]]
-name = "swarm"
-version = "0.1.0"
+name = "swarm-browser"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
