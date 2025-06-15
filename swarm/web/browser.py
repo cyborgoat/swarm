@@ -12,6 +12,13 @@ from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import BrowserContext, Page, async_playwright
 
 from swarm.core.config import BrowserConfig
+from swarm.core.exceptions import (
+    BrowserElementError,
+    BrowserError,
+    BrowserNavigationError,
+    BrowserSessionError,
+)
+from swarm.utils.exception_handler import handle_async_browser_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +47,7 @@ class Browser:
         self.page: Page | None = None
         self._session_active = False
 
+    @handle_async_browser_exceptions
     async def start_session(self) -> dict[str, Any]:
         """
         Start browser session using native Playwright async APIs.
@@ -75,7 +83,10 @@ class Browser:
             # Create context - async API with proper viewport
             self.context = await self.browser.new_context(
                 viewport={"width": self.config.viewport_width, "height": self.config.viewport_height},
-                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                ),
             )
 
             # Create page - async API
@@ -96,8 +107,9 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Failed to start browser session: {e}")
-            return {"status": "error", "message": f"Failed to start browser: {str(e)}"}
+            raise BrowserSessionError(f"Failed to start browser: {str(e)}")
 
+    @handle_async_browser_exceptions
     async def close_session(self) -> dict[str, Any]:
         """
         Close browser session and cleanup resources.
@@ -133,8 +145,9 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Error closing browser session: {e}")
-            return {"status": "error", "message": f"Error closing session: {str(e)}"}
+            raise BrowserSessionError(f"Error closing session: {str(e)}")
 
+    @handle_async_browser_exceptions
     async def navigate_to_url(self, url: str) -> dict[str, Any]:
         """
         Navigate to URL using native Playwright async navigation.
@@ -146,7 +159,7 @@ class Browser:
             Navigation result with page information
         """
         if not self._session_active or not self.page:
-            return {"status": "error", "message": "No active browser session"}
+            raise BrowserSessionError("No active browser session")
 
         # Add protocol if missing
         if not url.startswith(("http://", "https://")):
@@ -172,7 +185,7 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Navigation failed: {e}")
-            return {"status": "error", "message": f"Navigation failed: {str(e)}"}
+            raise BrowserNavigationError(f"Navigation failed: {str(e)}", url=url)
 
     async def get_current_url(self) -> str:
         """Get current page URL using async Playwright API."""
@@ -186,6 +199,9 @@ class Browser:
             return ""
         try:
             return await self.page.title()
+        except BrowserError as e:
+            logger.warning(f"Could not get page title: {e.message}")
+            return ""
         except Exception as e:
             logger.warning(f"Could not get page title: {e}")
             return ""
@@ -245,7 +261,8 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Content extraction failed: {e}")
-            return {"status": "error", "message": f"Content extraction failed: {str(e)}"}
+            # Convert to specific browser error for content extraction
+            raise BrowserError(f"Content extraction failed: {str(e)}", details="extract_page_content method")
 
     async def click_element_by_text(self, text: str) -> dict[str, Any]:
         """
@@ -340,7 +357,8 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Click failed: {e}")
-            return {"status": "error", "message": f"Click failed: {str(e)}"}
+            # Convert to specific browser element error
+            raise BrowserElementError(f"Click failed: {str(e)}", element=text, details="click_element_by_text method")
 
     async def fill_input_by_label(self, label: str, value: str) -> dict[str, Any]:
         """
@@ -427,7 +445,8 @@ class Browser:
             # Strategy 5: Find by partial text match in placeholder or name
             try:
                 locator = self.page.locator(
-                    f"input[placeholder*='{label}'], textarea[placeholder*='{label}'], input[name*='{label.lower()}'], textarea[name*='{label.lower()}']"
+                    f"input[placeholder*='{label}'], textarea[placeholder*='{label}'], "
+                    f"input[name*='{label.lower()}'], textarea[name*='{label.lower()}']"
                 )
                 if await locator.count() > 0:
                     await locator.fill(value)
@@ -448,7 +467,8 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Fill failed: {e}")
-            return {"status": "error", "message": f"Fill failed: {str(e)}"}
+            # Convert to specific browser element error
+            raise BrowserElementError(f"Fill failed: {str(e)}", element=label, details="fill_input_by_label method")
 
     async def select_dropdown_option(self, dropdown_label: str, option_value: str) -> dict[str, Any]:
         """
@@ -481,7 +501,7 @@ class Browser:
                             "message": f"Selected option: {option_value}",
                             "method": "select_by_value",
                         }
-                    except:
+                    except Exception:
                         locator.select_option(label=option_value)
                         logger.info(f"✅ Selected option by label: {option_value}")
                         return {
@@ -489,7 +509,7 @@ class Browser:
                             "message": f"Selected option: {option_value}",
                             "method": "select_by_label",
                         }
-            except:
+            except Exception:
                 pass
 
             # Strategy 2: get_by_role for combobox
@@ -503,7 +523,7 @@ class Browser:
                         "message": f"Selected option: {option_value}",
                         "method": "get_by_role_combobox",
                     }
-            except:
+            except Exception:
                 pass
 
             return {
@@ -513,7 +533,10 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Select dropdown failed: {e}")
-            return {"status": "error", "message": f"Select dropdown failed: {str(e)}"}
+            # Convert to specific browser element error
+            raise BrowserElementError(
+                f"Select dropdown failed: {str(e)}", element=dropdown_label, details="select_dropdown_option method"
+            )
 
     async def get_page_elements(self) -> dict[str, list[str]]:
         """
@@ -535,7 +558,7 @@ class Browser:
                     text = await button.inner_text()
                     if text.strip():
                         elements["buttons"].append(text.strip())
-                except:
+                except Exception:
                     pass
 
             # Get input fields
@@ -546,12 +569,12 @@ class Browser:
                     label = ""
                     try:
                         label = await input_elem.get_attribute("placeholder") or ""
-                    except:
+                    except Exception:
                         pass
                     try:
                         if not label:
                             label = await input_elem.get_attribute("name") or ""
-                    except:
+                    except Exception:
                         pass
                     try:
                         if not label:
@@ -561,11 +584,11 @@ class Browser:
                                 label_elem = await self.page.locator(f"label[for='{input_id}']").first
                                 if label_elem:
                                     label = await label_elem.inner_text()
-                    except:
+                    except Exception:
                         pass
                     if label:
                         elements["inputs"].append(label.strip())
-                except:
+                except Exception:
                     pass
 
             # Get links using native Playwright role locator
@@ -575,7 +598,7 @@ class Browser:
                     text = await link.inner_text()
                     if text.strip():
                         elements["links"].append(text.strip()[:50])  # Limit link text length
-                except:
+                except Exception:
                     pass
 
             # Get select elements
@@ -586,7 +609,7 @@ class Browser:
                     label = ""
                     try:
                         label = await select.get_attribute("name") or ""
-                    except:
+                    except Exception:
                         pass
                     try:
                         if not label:
@@ -595,11 +618,11 @@ class Browser:
                                 label_elem = await self.page.locator(f"label[for='{select_id}']").first
                                 if label_elem:
                                     label = await label_elem.inner_text()
-                    except:
+                    except Exception:
                         pass
                     if label:
                         elements["selects"].append(label.strip())
-                except:
+                except Exception:
                     pass
 
             logger.info(f"✅ Found {sum(len(v) for v in elements.values())} interactive elements")
@@ -607,7 +630,8 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Get page elements failed: {e}")
-            return {"buttons": [], "inputs": [], "links": [], "selects": []}
+            # Convert to specific browser error for page element extraction
+            raise BrowserError(f"Get page elements failed: {str(e)}", details="get_page_elements method")
 
     def take_screenshot(self, path: str | None = None) -> dict[str, Any]:
         """
@@ -634,7 +658,8 @@ class Browser:
 
         except Exception as e:
             logger.error(f"❌ Screenshot failed: {e}")
-            return {"status": "error", "message": f"Screenshot failed: {str(e)}"}
+            # Convert to specific browser error for screenshot
+            raise BrowserError(f"Screenshot failed: {str(e)}", details="take_screenshot method")
 
     async def get_session_status(self) -> dict[str, Any]:
         """Get current browser session status using async APIs."""
@@ -660,30 +685,46 @@ class Browser:
             }
         except Exception as e:
             logger.warning(f"Could not get session status: {e}")
+            # Return safe defaults instead of raising for status check
             return {
                 "active": self._session_active,
                 "current_url": "unknown",
                 "title": "unknown",
                 "headless": self.config.headless,
                 "viewport": f"{self.config.viewport_width}x{self.config.viewport_height}",
+                "error": str(e),
             }
 
     # Legacy compatibility methods
     def browse_persistent(self, url: str) -> dict[str, Any]:
         """Legacy method for compatibility."""
-        nav_result = self.navigate_to_url(url)
-        if nav_result["status"] == "success":
-            content_result = self.extract_page_content(max_length=5000)
-            return {
-                "url": nav_result["url"],
-                "title": nav_result["title"],
-                "content": content_result.get("content", ""),
-                "links": [],
-            }
-        else:
-            raise Exception(nav_result["message"])
+        try:
+            nav_result = self.navigate_to_url(url)
+            if nav_result["status"] == "success":
+                content_result = self.extract_page_content(max_length=5000)
+                return {
+                    "url": nav_result["url"],
+                    "title": nav_result["title"],
+                    "content": content_result.get("content", ""),
+                    "links": [],
+                }
+            else:
+                raise BrowserNavigationError(nav_result["message"], url=url)
+        except BrowserError:
+            # Re-raise specific browser errors
+            raise
+        except Exception as e:
+            # Convert other exceptions to browser errors
+            raise BrowserError(f"Browse persistent failed: {str(e)}", url=url, details="browse_persistent method")
 
     def extract_text_content(self, query: str | None = None) -> str:
         """Legacy method for compatibility."""
-        result = self.extract_page_content(query, max_length=10000)
-        return result.get("content", "") if result["status"] == "success" else ""
+        try:
+            result = self.extract_page_content(query, max_length=10000)
+            return result.get("content", "") if result["status"] == "success" else ""
+        except BrowserError:
+            # Return empty string for browser errors in legacy method
+            return ""
+        except Exception:
+            # Return empty string for any other errors in legacy method
+            return ""

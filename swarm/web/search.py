@@ -9,7 +9,8 @@ import httpx
 from bs4 import BeautifulSoup
 
 from swarm.core.config import SearchConfig
-from swarm.core.exceptions import WebError
+from swarm.core.exceptions import WebContentError, WebSearchError
+from swarm.utils.exception_handler import handle_web_exceptions
 
 
 class WebSearch:
@@ -25,10 +26,14 @@ class WebSearch:
         self.config = config
         self.session = httpx.Client(
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                )
             }
         )
 
+    @handle_web_exceptions
     def search(self, query: str) -> list[dict[str, Any]]:
         """
         Search the web for a query.
@@ -42,7 +47,7 @@ class WebSearch:
         if self.config.engine.lower() == "duckduckgo":
             return self._search_duckduckgo(query)
         else:
-            raise WebError(f"Search engine '{self.config.engine}' not supported")
+            raise WebSearchError(f"Search engine '{self.config.engine}' not supported", query=query)
 
     def _search_duckduckgo(self, query: str) -> list[dict[str, Any]]:
         """
@@ -172,8 +177,9 @@ class WebSearch:
             return results
 
         except Exception as e:
-            raise WebError(f"Failed to search DuckDuckGo: {str(e)}")
+            raise WebSearchError(f"Failed to search DuckDuckGo: {str(e)}", query=query)
 
+    @handle_web_exceptions
     def get_page_content(self, url: str) -> dict[str, Any]:
         """
         Get content from a web page.
@@ -204,7 +210,7 @@ class WebSearch:
             return {"url": url, "title": title, "content": text_content, "html": response.text}
 
         except Exception as e:
-            raise WebError(f"Failed to get content from {url}: {str(e)}")
+            raise WebContentError(f"Failed to get content from {url}: {str(e)}", url=url)
 
     def __del__(self) -> None:
         """Clean up HTTP session."""
