@@ -8,7 +8,8 @@ import httpx
 import ollama
 
 from swarm.core.config import LLMConfig
-from swarm.core.exceptions import LLMError
+from swarm.core.exceptions import LLMConnectionError, LLMError, LLMTimeoutError
+from swarm.utils.exception_handler import handle_llm_exceptions
 
 
 class LLMClient:
@@ -31,6 +32,7 @@ class LLMClient:
         if hasattr(self.config, "api_key") and self.config.api_key:
             self.session.headers["Authorization"] = f"Bearer {self.config.api_key}"
 
+    @handle_llm_exceptions
     def generate(self, prompt: str, system_prompt: str | None = None) -> str:
         """
         Generate text using the LLM.
@@ -45,12 +47,18 @@ class LLMClient:
         try:
             # Try Ollama API first
             return self._try_ollama_api(prompt, system_prompt)
+        except LLMError:
+            # Re-raise specific LLM errors
+            raise
         except Exception as ollama_error:
             try:
                 # Fallback to OpenAI-compatible API
                 return self._try_openai_api(prompt, system_prompt)
             except Exception as openai_error:
-                raise LLMError(f"Both Ollama and OpenAI APIs failed. Ollama: {ollama_error}, OpenAI: {openai_error}")
+                raise LLMConnectionError(
+                    f"Both Ollama and OpenAI APIs failed. Ollama: {ollama_error}, OpenAI: {openai_error}",
+                    model=getattr(self.config, "model", "unknown"),
+                )
 
     async def generate_async(self, prompt: str, system_prompt: str | None = None) -> str:
         """
@@ -65,6 +73,7 @@ class LLMClient:
         """
         return self.generate(prompt, system_prompt)
 
+    @handle_llm_exceptions
     def generate_with_functions(
         self,
         prompt: str,
@@ -87,12 +96,18 @@ class LLMClient:
         try:
             # Use official Ollama package for tool calling
             return self._try_ollama_tool_calling(prompt, functions, system_prompt, function_call)
+        except LLMError:
+            # Re-raise specific LLM errors
+            raise
         except Exception as ollama_error:
             try:
                 # Fallback to OpenAI-compatible API with function calling
                 return self._try_openai_function_calling(prompt, functions, system_prompt, function_call)
             except Exception as openai_error:
-                raise LLMError(f"Function calling failed. Ollama: {ollama_error}, OpenAI: {openai_error}")
+                raise LLMConnectionError(
+                    f"Function calling failed. Ollama: {ollama_error}, OpenAI: {openai_error}",
+                    model=getattr(self.config, "model", "unknown"),
+                )
 
     def _try_ollama_tool_calling(
         self,
@@ -101,24 +116,17 @@ class LLMClient:
         system_prompt: str | None = None,
         function_call: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Use official Ollama package for tool calling."""
+        """Try Ollama's tool calling functionality."""
+        # Convert functions to Ollama tools format
+        tools = []
+        for func in functions:
+            tools.append({"type": "function", "function": func})
+
+        # Prepare messages
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-
-        # Convert functions to Ollama's tools format
-        tools = []
-        for func in functions:
-            tool = {
-                "type": "function",
-                "function": {
-                    "name": func["name"],
-                    "description": func["description"],
-                    "parameters": func.get("parameters", {"type": "object", "properties": {}, "required": []}),
-                },
-            }
-            tools.append(tool)
 
         try:
             # Use official ollama package
@@ -152,7 +160,17 @@ class LLMClient:
                 return {"role": "assistant", "content": message.get("content", ""), "function_call": None}
 
         except Exception as e:
-            raise LLMError(f"Ollama tool calling error: {str(e)}")
+            error_msg = str(e).lower()
+            if "timeout" in error_msg or "timed out" in error_msg:
+                raise LLMTimeoutError(
+                    f"Ollama tool calling timeout: {str(e)}", model=getattr(self.config, "model", "unknown")
+                )
+            elif "connection" in error_msg or "connect" in error_msg:
+                raise LLMConnectionError(
+                    f"Ollama connection error: {str(e)}", model=getattr(self.config, "model", "unknown")
+                )
+            else:
+                raise LLMError(f"Ollama tool calling error: {str(e)}", model=getattr(self.config, "model", "unknown"))
 
     def _try_ollama_api(self, prompt: str, system_prompt: str | None = None) -> str:
         """Try Ollama's native API."""
@@ -178,8 +196,14 @@ class LLMClient:
 
             result = response.json()
             return result.get("response", "").strip()
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError(f"Ollama API timeout: {str(e)}", model=getattr(self.config, "model", "unknown"))
+        except httpx.ConnectError as e:
+            raise LLMConnectionError(
+                f"Ollama connection error: {str(e)}", model=getattr(self.config, "model", "unknown")
+            )
         except Exception as e:
-            raise LLMError(f"Ollama API error: {str(e)}")
+            raise LLMError(f"Ollama API error: {str(e)}", model=getattr(self.config, "model", "unknown"))
 
     def _try_openai_api(self, prompt: str, system_prompt: str | None = None) -> str:
         """Try OpenAI-compatible API."""
@@ -195,16 +219,25 @@ class LLMClient:
             "max_tokens": getattr(self.config, "max_tokens", 8192),
         }
 
-        response = self.session.post(
-            f"{getattr(self.config, 'base_url', 'http://localhost:11434')}/v1/chat/completions", json=payload
-        )
-        response.raise_for_status()
+        try:
+            response = self.session.post(
+                f"{getattr(self.config, 'base_url', 'http://localhost:11434')}/v1/chat/completions", json=payload
+            )
+            response.raise_for_status()
 
-        result = response.json()
-        if "choices" in result and result["choices"]:
-            return result["choices"][0]["message"]["content"]
-        else:
-            raise LLMError("No response generated from LLM")
+            result = response.json()
+            if "choices" in result and result["choices"]:
+                return result["choices"][0]["message"]["content"]
+            else:
+                raise LLMError("No response generated from LLM", model=getattr(self.config, "model", "unknown"))
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError(f"OpenAI API timeout: {str(e)}", model=getattr(self.config, "model", "unknown"))
+        except httpx.ConnectError as e:
+            raise LLMConnectionError(
+                f"OpenAI connection error: {str(e)}", model=getattr(self.config, "model", "unknown")
+            )
+        except Exception as e:
+            raise LLMError(f"OpenAI API error: {str(e)}", model=getattr(self.config, "model", "unknown"))
 
     def _try_openai_function_calling(
         self,

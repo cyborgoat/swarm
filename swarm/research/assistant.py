@@ -172,9 +172,6 @@ class ResearchAssistant:
             avg_relevance = (
                 sum(r.relevance_score for r in analysis_results) / len(analysis_results) if analysis_results else 0
             )
-            high_relevance_sources = sum(
-                1 for r in analysis_results if r.relevance_score >= self.config.research.relevance_threshold
-            )
 
             progress.update(
                 task, description=f"✅ Analyzed {len(analysis_results)} sources (avg relevance: {avg_relevance:.1f})"
@@ -182,7 +179,8 @@ class ResearchAssistant:
 
             if self.verbose:
                 console.print(
-                    f"[dim]📊 Analysis complete: {high_relevance_sources}/{len(analysis_results)} sources above threshold ({self.config.research.relevance_threshold})[/dim]"
+                    f"[dim]📊 Analysis complete: {len(analysis_results)} sources above threshold "
+                    f"({self.config.research.relevance_threshold})[/dim]"
                 )
 
     async def _synthesis_phase(self, progress: Progress, research_data: dict[str, Any]):

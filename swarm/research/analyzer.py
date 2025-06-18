@@ -63,7 +63,8 @@ class ContentAnalyzer:
 
         if high_relevance_count < 3 and len(processed_sources) < self.config.research.max_sources:
             console.print(
-                f"[yellow]🔍 Found only {high_relevance_count} high-relevance sources. Consider expanding search.[/yellow]"
+                f"[yellow]🔍 Found only {high_relevance_count} high-relevance sources. "
+                f"Consider expanding search.[/yellow]"
             )
 
         return processed_sources

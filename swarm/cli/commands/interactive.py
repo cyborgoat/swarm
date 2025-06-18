@@ -170,7 +170,7 @@ CRITICAL INSTRUCTIONS:
 
 ALWAYS USE TOOLS FOR:
 - "search for X" → use search_web
-- "go to X", "browse X", "navigate to X" → use navigate_to_url  
+- "go to X", "browse X", "navigate to X" → use navigate_to_url
 - "what's on this page", "summarize this page", "get page content" → use extract_page_content
 - "take a screenshot", "capture the page" → use take_screenshot (if available)
 - "click X", "click on X" → use click_element_by_text
@@ -195,7 +195,7 @@ CRITICAL INSTRUCTIONS:
 
 ALWAYS USE TOOLS FOR:
 - "search for X" → use search_web
-- "go to X", "browse X", "navigate to X" → use navigate_to_url  
+- "go to X", "browse X", "navigate to X" → use navigate_to_url
 - "what's on this page", "summarize this page", "get page content" → use extract_page_content
 - "take a screenshot", "capture the page" → use take_screenshot (if available)
 - "click X", "click on X" → use click_element_by_text
@@ -248,16 +248,27 @@ Remember: If the user asks for ANY action, use tools. Only chat normally for gre
             if is_casual:
                 # Handle casual conversation without tools
                 if "who are you" in user_lower or "what are you" in user_lower:
-                    return "I'm an AI research assistant with browser automation capabilities. I can help you search the web, navigate to websites, extract content from pages, and perform various browser actions. Just ask me to search for something or browse to a website!"
+                    return (
+                        "I'm an AI research assistant with browser automation capabilities. "
+                        "I can help you search the web, navigate to websites, extract content from pages, "
+                        "and perform various browser actions. Just ask me to search for something "
+                        "or browse to a website!"
+                    )
                 elif any(greeting in user_lower for greeting in ["hello", "hi", "hey"]):
-                    return "Hello! I'm your AI research assistant. I can help you with web browsing, searching, and automation tasks. What would you like me to do?"
+                    return (
+                        "Hello! I'm your AI research assistant. I can help you with web browsing, "
+                        "searching, and automation tasks. What would you like me to do?"
+                    )
                 elif "how are you" in user_lower:
-                    return "I'm doing great and ready to help! I can browse websites, search for information, and automate web tasks for you. What can I assist you with?"
+                    return (
+                        "I'm doing great and ready to help! I can browse websites, search for information, "
+                        "and automate web tasks for you. What can I assist you with?"
+                    )
                 elif user_lower == "help":
                     return """I'm an AI research assistant with browser automation capabilities. Here's what I can do:
 
 🔍 **Search**: "search for gaming mice" or "find information about Python"
-🌐 **Navigate**: "go to github.com" or "browse stackoverflow.com"  
+🌐 **Navigate**: "go to github.com" or "browse stackoverflow.com"
 📄 **Extract**: "what's on this page" or "get page content"
 🖱️ **Interact**: "click the login button" or "fill email with john@example.com"
 📸 **Screenshot**: "take a screenshot" or "capture the page"
@@ -268,7 +279,10 @@ Just tell me what you'd like to do in natural language!"""
                 elif any(bye in user_lower for bye in ["bye", "goodbye"]):
                     return "Goodbye! Feel free to come back anytime you need help with web research or automation."
                 else:
-                    return "I'm here to help! You can ask me to search for information, browse websites, or perform web automation tasks."
+                    return (
+                        "I'm here to help! You can ask me to search for information, "
+                        "browse websites, or perform web automation tasks."
+                    )
 
             # For non-casual queries, ensure browser is started first
             if self.use_mcp:
@@ -364,7 +378,11 @@ Please provide a clear, human-readable response to the user based on this result
                             interpretation_response = self.llm_client.generate_with_functions(
                                 prompt=interpretation_prompt,
                                 functions=[],  # No tools for interpretation
-                                system_prompt="You are an AI assistant interpreting tool results for users. Provide clear, helpful responses based on the tool execution results. Do not call any tools - just interpret and explain the results.",
+                                system_prompt=(
+                                    "You are an AI assistant interpreting tool results for users. "
+                                    "Provide clear, helpful responses based on the tool execution results. "
+                                    "Do not call any tools - just interpret and explain the results."
+                                ),
                             )
 
                             interpreted_result = interpretation_response.get("content", "Tool executed successfully.")
@@ -372,7 +390,6 @@ Please provide a clear, human-readable response to the user based on this result
                             # Also show a visual summary based on function type
                             if function_name == "search_web":
                                 # Handle different possible result structures
-                                search_results = None
                                 results = []
 
                                 # Try to extract results from different possible structures
@@ -394,7 +411,7 @@ Please provide a clear, human-readable response to the user based on this result
                                             parsed_content = json.loads(result_data["content"])
                                             if isinstance(parsed_content, dict) and "results" in parsed_content:
                                                 results = parsed_content["results"]
-                                        except:
+                                        except json.JSONDecodeError:
                                             pass
 
                                 if results and len(results) > 0:
@@ -403,7 +420,8 @@ Please provide a clear, human-readable response to the user based on this result
                                     # Display search results in detail
                                     console.print(
                                         Panel.fit(
-                                            f"🔍 Found {results_count} search results for: {arguments.get('query', 'N/A')}",
+                                            f"🔍 Found {results_count} search results for: "
+                                            f"{arguments.get('query', 'N/A')}",
                                             title="🤖 Search Results",
                                             border_style="green",
                                         )
@@ -602,7 +620,10 @@ Please provide a clear, human-readable response to the user based on this result
                     console.print("\n💡 Try being more specific about what action you want me to take.")
                     return f"I understood your request but didn't use any tools. {content}"
                 else:
-                    return "I'm ready to help! Please tell me what specific action you'd like me to take (search, navigate, extract content, etc.)"
+                    return (
+                        "I'm ready to help! Please tell me what specific action you'd like me to take "
+                        "(search, navigate, extract content, etc.)"
+                    )
 
         except Exception as e:
             logger.error(f"❌ Unexpected error: {e}")
@@ -631,7 +652,7 @@ Please provide a clear, human-readable response to the user based on this result
 
         # Check if we're already in an event loop
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're in an event loop, create a task
             import concurrent.futures
 

@@ -5,7 +5,6 @@ Research command - Thin wrapper around the research module.
 import asyncio
 
 from rich.console import Console
-from rich.panel import Panel
 
 from swarm.core.config import Config
 from swarm.research import ResearchAssistant
@@ -70,16 +69,10 @@ async def handle_research_async(
         # Display final completion message
         analysis_results = research_data.get("analysis_results", [])
         console.print(
-            Panel.fit(
-                f"✅ [bold green]Research Complete![/bold green]\n"
-                f"📊 Sources analyzed: {len(analysis_results)}\n"
-                f"🎯 High relevance sources: {sum(1 for r in analysis_results if r.relevance_score >= config.research.relevance_threshold)}\n"
-                f"🖼️ Images found: {len(research_data.get('images_found', []))}\n"
-                f"🌐 Language: {config.research.output_language}\n"
-                f"📝 Report saved: {save_filename}",
-                title="🏆 Mission Accomplished",
-                border_style="green",
-            )
+            f"[green]✅ Research complete![/green] "
+            f"Found {len([r for r in analysis_results if r.relevance_score >= config.research.relevance_threshold])} "
+            f"high-relevance sources.\n"
+            f"Images found: {len(research_data.get('images_found', []))}\n"
         )
 
     except Exception as e:

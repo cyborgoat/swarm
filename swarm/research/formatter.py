@@ -36,7 +36,8 @@ class ResearchFormatter:
         # Statistics
         stats_data = [
             f"📊 {lang.get_text('sources_analyzed')}: {len(sources)}",
-            f"🎯 {lang.get_text('themes_identified')}: {len(set(theme for analysis in analyses for theme in analysis.themes))}",
+            f"🎯 {lang.get_text('themes_identified')}: "
+            f"{len(set(theme for analysis in analyses for theme in analysis.themes))}",
             f"🔍 {lang.get_text('relevance_distribution')}: {self._get_relevance_distribution(analyses)}",
         ]
 
@@ -140,10 +141,10 @@ class ResearchFormatter:
         # Generate report
         report = f"""# {lang.get_text("research_report")}: {self.query}
 
-**{lang.get_text("generated")}:** {timestamp}  
-**{lang.get_text("model")}:** {self.config.llm.model}  
-**{lang.get_text("context_size")}:** {self.config.llm.max_tokens:,} {lang.get_text("tokens")}  
-**{lang.get_text("sources_analyzed")}:** {len(sources)}  
+**{lang.get_text("generated")}:** {timestamp}
+**{lang.get_text("model")}:** {self.config.llm.model}
+**{lang.get_text("context_size")}:** {self.config.llm.max_tokens:,} {lang.get_text("tokens")}
+**{lang.get_text("sources_analyzed")}:** {len(sources)}
 **{lang.get_text("images_found")}:** {len(all_images)}
 
 ---
@@ -169,7 +170,7 @@ class ResearchFormatter:
             report += f"""
 ### {lang.get_text("finding")} {i}
 
-**{lang.get_text("relevance_score")}:** {analysis.relevance_score:.1f}/10  
+**{lang.get_text("relevance_score")}:** {analysis.relevance_score:.1f}/10
 **{lang.get_text("source")}:** {sources[analyses.index(analysis)].get("title", "Unknown")}
 
 {analysis.key_finding}
@@ -193,7 +194,7 @@ class ResearchFormatter:
                 report += f"""
 ### {theme}
 
-**{lang.get_text("supporting_sources")}:** {count}  
+**{lang.get_text("supporting_sources")}:** {count}
 **{lang.get_text("sources_found")}:** {", ".join(supporting_sources)}
 
 """
@@ -237,9 +238,9 @@ class ResearchFormatter:
             report += f"""
 ### {i}. {source.get("title", "Unknown")}
 
-**URL:** {source.get("url", "N/A")}  
-**{lang.get_text("relevance_score")}:** {analysis.relevance_score:.1f}/10  
-**{lang.get_text("word_count")}:** {analysis.word_count:,}  
+**URL:** {source.get("url", "N/A")}
+**{lang.get_text("relevance_score")}:** {analysis.relevance_score:.1f}/10
+**{lang.get_text("word_count")}:** {analysis.word_count:,}
 **Extraction:** {extraction_depth} | **Analysis:** {analysis_depth}
 
 #### {lang.get_text("summary")}
@@ -279,13 +280,16 @@ class ResearchFormatter:
             analysis_indicator = "E" if analysis.analysis_method == "enhanced" else "N"
             depth_display = f"{extraction_indicator}/{analysis_indicator}"
 
-            report += f"| {i} | [{title}...]({source.get('url', '#')}) | {analysis.relevance_score:.1f} | {analysis.word_count:,} | {depth_display} |\n"
+            report += (
+                f"| {i} | [{title}...]({source.get('url', '#')}) | "
+                f"{analysis.relevance_score:.1f} | {analysis.word_count:,} | {depth_display} |\n"
+            )
 
         report += f"""
 
 ### {lang.get_text("depth_legend")}
 - **N/N**: Normal extraction, Standard analysis
-- **D/N**: Deep extraction, Standard analysis  
+- **D/N**: Deep extraction, Standard analysis
 - **N/E**: Normal extraction, Enhanced analysis
 - **D/E**: Deep extraction, Enhanced analysis
 
