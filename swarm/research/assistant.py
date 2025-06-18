@@ -8,9 +8,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
-from swarm.core.config import Config
-from swarm.web.browser import Browser
-from swarm.web.search import WebSearch
+from swarm.core.services import ServiceMixin
 
 from .analyzer import ContentAnalyzer
 from .extractor import ContentExtractor
@@ -20,28 +18,26 @@ from .image_processor import ImageProcessor
 console = Console()
 
 
-class ResearchAssistant:
+class ResearchAssistant(ServiceMixin):
     """Main research assistant that coordinates the entire research process."""
 
-    def __init__(self, config: Config, verbose: bool = False, include_images: bool = True):
-        self.config = config
+    def __init__(self, verbose: bool = False, include_images: bool = True):
+        # Note: ServiceContainer should be initialized before creating ResearchAssistant
+        # This is typically done in the CLI or main application entry point
+
         self.verbose = verbose
         self.include_images = include_images
 
-        # Initialize components
-        self.browser = Browser(config.browser)
-        self.search = WebSearch(config.search)
-
-        # Initialize specialized processors
-        self.analyzer = ContentAnalyzer(config)
-        self.extractor = ContentExtractor(self.browser, verbose)
-        self.image_processor = ImageProcessor(self.browser, verbose) if include_images else None
+        # Initialize specialized processors using the new architecture
+        self.analyzer = ContentAnalyzer(verbose)
+        self.extractor = ContentExtractor(verbose)
+        self.image_processor = ImageProcessor(verbose) if include_images else None
         self.formatter = None  # Will be initialized with query
 
         if verbose:
-            console.print(f"[dim]🔧 Research Assistant initialized with {config.llm.model}[/dim]")
-            console.print(f"[dim]📊 Context: {config.llm.max_tokens} tokens[/dim]")
-            console.print(f"[dim]🌐 Language: {config.research.output_language}[/dim]")
+            console.print(f"[dim]🔧 Research Assistant initialized with {self.config.llm.model}[/dim]")
+            console.print(f"[dim]📊 Context: {self.config.llm.max_tokens} tokens[/dim]")
+            console.print(f"[dim]🌐 Language: {self.config.research.output_language}[/dim]")
 
     async def conduct_research(self, query: str, max_sources: int = 8) -> dict[str, Any]:
         """
@@ -55,7 +51,7 @@ class ResearchAssistant:
             Complete research results
         """
         # Initialize formatter with query
-        self.formatter = ResearchFormatter(self.config, query)
+        self.formatter = ResearchFormatter(query)
 
         # Initialize research data
         research_data = {
@@ -89,28 +85,32 @@ class ResearchAssistant:
             TaskProgressColumn(),
             console=console,
         ) as progress:
-            # Phase 1: Web Search
-            await self._search_phase(query, max_sources, progress, research_data)
+            # Create a single task that will be reused across all phases
+            main_task = progress.add_task("🔍 Starting research...", total=100)
 
-            # Phase 2: Content Analysis
+            # Phase 1: Web Search (0-30%)
+            await self._search_phase(query, max_sources, progress, research_data, main_task)
+
+            # Phase 2: Content Analysis (30-80%)
             if research_data["search_results"]:
-                await self._analysis_phase(progress, research_data)
+                await self._analysis_phase(progress, research_data, main_task)
 
-            # Phase 3: Synthesis
+            # Phase 3: Synthesis (80-100%)
             if research_data["analysis_results"]:
-                await self._synthesis_phase(progress, research_data)
+                await self._synthesis_phase(progress, research_data, main_task)
 
         return research_data
 
-    async def _search_phase(self, query: str, max_sources: int, progress: Progress, research_data: dict[str, Any]):
+    async def _search_phase(
+        self, query: str, max_sources: int, progress: Progress, research_data: dict[str, Any], task_id: int
+    ):
         """Phase 1: Search for relevant sources."""
-        task = progress.add_task("🔍 Searching web sources...", total=100)
 
         try:
-            progress.update(task, advance=30, description="🔍 Performing web search...")
+            progress.update(task_id, advance=10, description="🔍 Performing web search...")
             search_results = self.search.search(query)[:max_sources]
 
-            progress.update(task, advance=40, description="🔍 Filtering results...")
+            progress.update(task_id, advance=10, description="🔍 Filtering results...")
             # Remove duplicates and invalid results
             valid_results = []
             seen_urls = set()
@@ -120,75 +120,101 @@ class ResearchAssistant:
                     seen_urls.add(result["url"])
 
             research_data["search_results"] = valid_results
-            progress.update(task, advance=30, description=f"✅ Found {len(valid_results)} sources")
+            progress.update(task_id, advance=10, description=f"✅ Found {len(valid_results)} sources")
 
             if self.verbose:
                 console.print(f"[dim]📊 Search completed: {len(valid_results)} valid sources[/dim]")
 
         except Exception as e:
-            progress.update(task, advance=100, description=f"❌ Search failed: {str(e)}")
+            progress.update(task_id, description=f"❌ Search failed: {str(e)}")
             console.print(f"[red]Search error: {str(e)}[/red]")
+            raise e
 
-    async def _analysis_phase(self, progress: Progress, research_data: dict[str, Any]):
+    async def _analysis_phase(self, progress: Progress, research_data: dict[str, Any], task_id: int):
         """Phase 2: Analyze source content with intelligent depth adjustment."""
         sources = research_data["search_results"]
-        task = progress.add_task("📄 Analyzing sources...", total=len(sources))
-
-        # Prepare sources for analysis
-        prepared_sources = []
-        for source in sources:
-            progress.update(task, advance=0, description=f"📄 Extracting content from {source['title'][:30]}...")
-
-            try:
-                # Extract content with intelligent retry
-                content_data = await self.extractor.extract_with_retry(
-                    url=source["url"], title=source["title"], query=research_data["query"], config=self.config.research
-                )
-
-                if content_data:
-                    # Extract images if enabled
-                    if self.image_processor:
-                        images = await self.image_processor.extract_images(source["url"])
-                        content_data["images"] = images
-                        if images:
-                            research_data["images_found"].extend(images)
-
-                    prepared_sources.append(content_data)
-
-            except Exception as e:
-                if self.verbose:
-                    console.print(f"[yellow]⚠️ Failed to extract: {source['title'][:50]}... - {str(e)}[/yellow]")
-                continue
-
-        # Analyze all sources with intelligent processing
-        if prepared_sources:
-            analysis_results = await self.analyzer.analyze_sources(
-                prepared_sources, research_data["query"], progress, task
-            )
-
-            research_data["analysis_results"] = analysis_results
-
-            # Display analysis summary
-            avg_relevance = (
-                sum(r.relevance_score for r in analysis_results) / len(analysis_results) if analysis_results else 0
-            )
-
-            progress.update(
-                task, description=f"✅ Analyzed {len(analysis_results)} sources (avg relevance: {avg_relevance:.1f})"
-            )
-
-            if self.verbose:
-                console.print(
-                    f"[dim]📊 Analysis complete: {len(analysis_results)} sources above threshold "
-                    f"({self.config.research.relevance_threshold})[/dim]"
-                )
-
-    async def _synthesis_phase(self, progress: Progress, research_data: dict[str, Any]):
-        """Phase 3: Synthesize findings and generate final report."""
-        task = progress.add_task("🧠 Synthesizing findings...", total=100)
 
         try:
-            progress.update(task, advance=50, description="🧠 Generating final summary...")
+            progress.update(task_id, description="📄 Analyzing sources...")
+
+            # Prepare sources for analysis
+            prepared_sources = []
+            sources_processed = 0
+
+            for source in sources:
+                # Calculate progress within the analysis phase (30-80% range)
+                phase_progress = int(30 + (sources_processed / len(sources)) * 25)  # 25% of total for extraction
+                progress.update(task_id, completed=phase_progress, description="📄 Extracting content...")
+
+                # If verbose, print separate messages for clarity
+                if self.verbose:
+                    console.print(f"[dim]📄 Extracting content from {source['title'][:50]}...[/dim]")
+
+                try:
+                    # Extract content with intelligent retry
+                    content_data = await self.extractor.extract_with_retry(
+                        url=source["url"], title=source["title"], query=research_data["query"]
+                    )
+
+                    if content_data:
+                        # Extract images if enabled
+                        if self.image_processor:
+                            images = await self.image_processor.extract_images(source["url"])
+                            content_data["images"] = images
+                            if images:
+                                research_data["images_found"].extend(images)
+
+                        prepared_sources.append(content_data)
+
+                except Exception as e:
+                    if self.verbose:
+                        console.print(f"[yellow]⚠️ Failed to extract: {source['title'][:50]}... - {str(e)}[/yellow]")
+                    continue
+                finally:
+                    sources_processed += 1
+
+            # Analyze all sources with intelligent processing (55-80% range)
+            if prepared_sources:
+                progress.update(task_id, completed=55, description="🧠 Analyzing content...")
+
+                analysis_results = await self.analyzer.analyze_sources(
+                    prepared_sources,
+                    research_data["query"],
+                    None,
+                    None,  # Don't pass progress to avoid nested progress bars
+                )
+
+                research_data["analysis_results"] = analysis_results
+
+                # Display analysis summary
+                avg_relevance = (
+                    sum(r.relevance_score for r in analysis_results) / len(analysis_results) if analysis_results else 0
+                )
+
+                progress.update(
+                    task_id,
+                    completed=80,
+                    description=f"✅ Analyzed {len(analysis_results)} sources (avg relevance: {avg_relevance:.1f})",
+                )
+
+                if self.verbose:
+                    console.print(
+                        f"[dim]📊 Analysis complete: {len(analysis_results)} sources above threshold "
+                        f"({self.config.research.relevance_threshold})[/dim]"
+                    )
+            else:
+                progress.update(task_id, completed=80, description="⚠️ No sources to analyze.")
+
+        except Exception as e:
+            progress.update(task_id, description=f"❌ Analysis failed: {str(e)}")
+            console.print(f"[red]Analysis error: {str(e)}[/red]")
+            raise e
+
+    async def _synthesis_phase(self, progress: Progress, research_data: dict[str, Any], task_id: int):
+        """Phase 3: Synthesize findings and generate final report."""
+
+        try:
+            progress.update(task_id, completed=80, description="🧠 Generating final summary...")
 
             # Generate final summary using all analysis results
             final_summary = await self.analyzer.generate_final_summary(
@@ -196,16 +222,17 @@ class ResearchAssistant:
             )
             research_data["final_summary"] = final_summary
 
-            progress.update(task, advance=50, description="✅ Synthesis complete!")
+            progress.update(task_id, completed=100, description="✅ Synthesis complete!")
 
         except Exception as e:
-            progress.update(task, advance=100, description=f"❌ Synthesis failed: {str(e)}")
+            progress.update(task_id, description=f"❌ Synthesis failed: {str(e)}")
             console.print(f"[red]Synthesis error: {str(e)}[/red]")
+            raise e
 
     def display_results(self, research_data: dict[str, Any]) -> None:
         """Display comprehensive research results."""
         if not self.formatter:
-            self.formatter = ResearchFormatter(self.config, research_data["query"])
+            self.formatter = ResearchFormatter(research_data["query"])
 
         self.formatter.display_results(
             research_data["analysis_results"],
@@ -217,7 +244,7 @@ class ResearchAssistant:
     def generate_markdown_report(self, research_data: dict[str, Any]) -> str:
         """Generate markdown research report."""
         if not self.formatter:
-            self.formatter = ResearchFormatter(self.config, research_data["query"])
+            self.formatter = ResearchFormatter(research_data["query"])
 
         return self.formatter.generate_markdown_report(
             research_data["analysis_results"],

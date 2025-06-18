@@ -7,6 +7,7 @@ import asyncio
 from rich.console import Console
 
 from swarm.core.config import Config
+from swarm.core.services import ServiceContainer
 from swarm.research import ResearchAssistant
 
 console = Console()
@@ -36,8 +37,11 @@ async def handle_research_async(
     # Override browser headless setting
     config.browser.headless = headless
 
-    # Initialize research assistant
-    research_assistant = ResearchAssistant(config=config, verbose=verbose, include_images=include_images)
+    # Initialize service container with config
+    ServiceContainer.initialize(config)
+
+    # Initialize research assistant (now uses dependency injection)
+    research_assistant = ResearchAssistant(verbose=verbose, include_images=include_images)
 
     try:
         # Conduct research
@@ -46,34 +50,41 @@ async def handle_research_async(
         # Display results
         research_assistant.display_results(research_data)
 
-        # Generate markdown report
-        markdown_report = research_assistant.generate_markdown_report(research_data)
-
-        # Save results
-        if output_file:
-            # User provided filename
-            if not output_file.endswith(".md"):
-                output_file += ".md"
-            save_filename = output_file
-        else:
-            # Auto-generate filename
-            save_filename = research_assistant.get_auto_filename()
-            console.print(f"[dim]📝 Auto-generating filename: {save_filename}[/dim]")
-
-        # Write markdown report to file
-        with open(save_filename, "w", encoding="utf-8") as f:
-            f.write(markdown_report)
-
-        console.print(f"[green]💾 Report saved to: {save_filename}[/green]")
-
-        # Display final completion message
         analysis_results = research_data.get("analysis_results", [])
-        console.print(
-            f"[green]✅ Research complete![/green] "
-            f"Found {len([r for r in analysis_results if r.relevance_score >= config.research.relevance_threshold])} "
-            f"high-relevance sources.\n"
-            f"Images found: {len(research_data.get('images_found', []))}\n"
+        high_relevance_sources_count = len(
+            [r for r in analysis_results if r.relevance_score >= config.research.relevance_threshold]
         )
+
+        if high_relevance_sources_count > 0:
+            # Generate markdown report
+            markdown_report = research_assistant.generate_markdown_report(research_data)
+
+            # Save results
+            if output_file:
+                # User provided filename
+                if not output_file.endswith(".md"):
+                    output_file += ".md"
+                save_filename = output_file
+            else:
+                # Auto-generate filename
+                save_filename = research_assistant.get_auto_filename()
+                console.print(f"[dim]📝 Auto-generating filename: {save_filename}[/dim]")
+
+            # Write markdown report to file
+            with open(save_filename, "w", encoding="utf-8") as f:
+                f.write(markdown_report)
+
+            console.print(f"[green]💾 Report saved to: {save_filename}[/green]")
+
+            # Display final completion message
+            console.print(
+                f"[green]✅ Research complete![/green] "
+                f"Found {high_relevance_sources_count} "
+                f"high-relevance sources.\n"
+                f"Images found: {len(research_data.get('images_found', []))}\n"
+            )
+        else:
+            console.print("[yellow]⚠️ No high-relevance sources found. Report not generated.[/yellow]")
 
     except Exception as e:
         console.print(f"[red]❌ Research failed: {str(e)}[/red]")

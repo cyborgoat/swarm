@@ -177,11 +177,14 @@ The MCP server provides **14 tools** to LLMs:
 #### Basic Commands
 
 ```bash
-# Browse a specific URL
-uv run swarm browse https://example.com
+# Conduct AI-powered research
+uv run swarm research "Python web scraping best practices" --max-results 5
 
-# Search the web
-uv run swarm search "Python tutorials"
+# Start interactive mode
+uv run swarm interactive
+
+# Start MCP server for LLM integration
+uv run swarm mcp-server
 
 # Show information
 uv run swarm info
@@ -192,7 +195,12 @@ uv run swarm info
 ### Core Components
 
 - **🧠 LLM Client**: Connects to Ollama, VLLM, or OpenAI-compatible APIs with enhanced timeout handling
-- **🌐 Browser Engine**: Playwright-based automation with persistent sessions and async support
+- **🌐 Modular Browser Engine**: Clean, modular Playwright-based automation with focused components:
+  - **BrowserSession**: Lifecycle management with optimized settings
+  - **BrowserNavigator**: Enhanced navigation with retry logic
+  - **BrowserInteractor**: Multi-strategy element interactions  
+  - **BrowserExtractor**: Smart content extraction with semantic selectors
+  - **BrowserUtils**: Reusable utilities and element finding
 - **🔍 Search Engine**: DuckDuckGo integration with duplicate URL elimination
 - **⚡ MCP Server**: Model Context Protocol server for LLM tool integration with full logging
 - **🎨 CLI Interface**: Rich terminal interface with progress indicators
@@ -397,17 +405,29 @@ swarm/
 │   ├── commands/        # Individual command handlers
 │   │   ├── interactive.py         # Interactive mode with MCP detection
 │   │   ├── research.py           # Research command with argument parsing
-│   │   └── research_assistant.py # Enhanced 4-phase research assistant
+│   │   └── mcp_server.py         # MCP server command
 │   └── main.py         # Main CLI entry point
 ├── core/               # Core configuration and exceptions
-│   └── config.py       # Enhanced configuration with better defaults
+│   ├── config.py       # Enhanced configuration with better defaults
+│   └── services.py     # Dependency injection container
 ├── web/                # Web automation components
-│   ├── browser.py      # Async Playwright browser automation
+│   ├── browser/        # Modular browser components
+│   │   ├── browser.py      # Main orchestrator class
+│   │   ├── session.py      # Session lifecycle management
+│   │   ├── navigator.py    # Navigation operations
+│   │   ├── interactor.py   # Element interactions
+│   │   ├── extractor.py    # Content extraction
+│   │   └── utils.py        # Helper utilities
 │   └── search.py       # DuckDuckGo search with duplicate elimination
+├── research/           # Research system
+│   ├── assistant.py    # Main research coordinator
+│   ├── analyzer.py     # Content analysis
+│   ├── extractor.py    # Content extraction
+│   └── formatter.py    # Report formatting
 ├── llm/                # LLM client and integration
 │   └── client.py       # Enhanced LLM client with timeout handling
-├── mcp/                # Model Context Protocol server
-│   └── browser_server.py    # MCP server with 14 tools and logging
+├── mcp_tools/          # Model Context Protocol server
+│   └── server.py       # MCP server with 14 tools and logging
 └── utils/              # Utility functions
 ```
 
@@ -487,6 +507,14 @@ uv run python swarm/cli/commands/research.py "test query" --limit 2 --verbose
 
 ## 🚀 Recent Improvements
 
+### v2.1 - Modular Browser Architecture
+- **🏗️ Modular Design**: Refactored browser from 730-line monolith to focused components
+- **🔧 Dependency Injection**: Clean service container eliminates deep config passing
+- **⚡ Enhanced Reliability**: Multi-strategy element finding with retry logic
+- **🚀 Better Performance**: Resource optimization and enhanced browser settings
+- **🎯 Smart Methods**: `smart_search_and_click()`, `smart_fill_form()` utilities
+- **🧪 Improved Testability**: Each component can be tested in isolation
+
 ### v2.0 - Enhanced Research System
 - **🔍 Duplicate URL Elimination**: Fixed search returning duplicate results
 - **⏱️ Timeout Handling**: Resolved LLM timeout issues with retry logic
@@ -495,12 +523,14 @@ uv run python swarm/cli/commands/research.py "test query" --limit 2 --verbose
 - **⚡ Async Operations**: Full async support eliminating threading conflicts
 - **📝 Rich Reporting**: Detailed progress reporting and structured output
 
-### Technical Fixes
+### Technical Improvements
+- **Modular Browser Components**: Session, Navigator, Interactor, Extractor, Utils
+- **Service Container Pattern**: Clean dependency injection throughout application
+- **Enhanced Element Finding**: Multiple strategies for robust automation
+- **Resource Optimization**: Automatic blocking of ads/analytics for faster loading
+- **Async Context Manager**: `async with Browser()` pattern support
 - Increased HTTP timeouts from 30s to 120s
 - Enhanced token management (4096 → 8192 tokens)
-- Added URL deduplication in search results
-- Implemented retry logic for all LLM calls
-- Optimized content limiting to prevent token overflow
 - Updated default model to `llama3.2:latest`
 
 ## 🤝 Contributing

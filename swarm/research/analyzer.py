@@ -9,8 +9,7 @@ from typing import Any
 from rich.console import Console
 from rich.progress import Progress
 
-from swarm.core.config import Config
-from swarm.llm.client import LLMClient
+from swarm.core.services import ServiceMixin
 from swarm.research.language import LanguageHelper
 
 console = Console()
@@ -29,13 +28,12 @@ class AnalysisResult:
     analysis_method: str = "normal"  # normal, enhanced
 
 
-class ContentAnalyzer:
+class ContentAnalyzer(ServiceMixin):
     """Handles intelligent analysis of research content using LLM."""
 
-    def __init__(self, config: Config):
-        self.config = config
-        self.llm_client = LLMClient(config)
-        self.language_helper = LanguageHelper(config.research.output_language)
+    def __init__(self, verbose: bool = False):
+        self.verbose = verbose
+        self.language_helper = LanguageHelper(self.config.research.output_language)
 
     async def analyze_sources(
         self, sources: list[dict[str, Any]], query: str, progress: Progress | None = None, task_id: int | None = None
@@ -143,12 +141,12 @@ class ContentAnalyzer:
 
         try:
             # Get summary
-            summary_response = await self.llm_client.generate_async(prompt_template)
+            summary_response = await self.llm.generate_async(prompt_template)
             summary = summary_response.strip()
 
             # Get key finding
             finding_prompt = self.language_helper.get_prompt("key_finding", query=query, title=title, content=content)
-            finding_response = await self.llm_client.generate_async(finding_prompt)
+            finding_response = await self.llm.generate_async(finding_prompt)
             key_finding = finding_response.strip()
 
             # Calculate relevance score (simple heuristic)
@@ -272,7 +270,7 @@ class ContentAnalyzer:
         )
 
         try:
-            summary = await self.llm_client.generate_async(prompt)
+            summary = await self.llm.generate_async(prompt)
             return summary.strip()
         except Exception as e:
             console.print(f"[red]Error generating final summary: {str(e)}[/red]")

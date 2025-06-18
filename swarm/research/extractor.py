@@ -6,16 +6,15 @@ from typing import Any
 
 from rich.console import Console
 
-from swarm.web.browser import Browser
+from swarm.core.services import ServiceMixin
 
 console = Console()
 
 
-class ContentExtractor:
+class ContentExtractor(ServiceMixin):
     """Handles content extraction from web sources with intelligent depth adjustment."""
 
-    def __init__(self, browser: Browser, verbose: bool = False):
-        self.browser = browser
+    def __init__(self, verbose: bool = False):
         self.verbose = verbose
 
     async def extract_source_content(
@@ -74,9 +73,7 @@ class ContentExtractor:
                 console.print(f"[red]❌ Error extracting content from {title[:50]}...: {str(e)}[/red]")
             return None
 
-    async def extract_with_retry(
-        self, url: str, title: str, query: str, config, attempt: int = 1
-    ) -> dict[str, Any] | None:
+    async def extract_with_retry(self, url: str, title: str, query: str, attempt: int = 1) -> dict[str, Any] | None:
         """
         Extract content with intelligent retry logic based on relevance and word count.
 
@@ -84,7 +81,6 @@ class ContentExtractor:
             url: Source URL
             title: Source title
             query: Research query
-            config: Research configuration
             attempt: Current attempt number
 
         Returns:
@@ -92,10 +88,10 @@ class ContentExtractor:
         """
         # Determine extraction parameters based on attempt
         if attempt == 1:
-            max_length = config.content_limit
+            max_length = self.config.research.content_limit
             deep_extraction = False
         else:
-            max_length = config.deep_content_limit
+            max_length = self.config.research.deep_content_limit
             deep_extraction = True
 
         content_data = await self.extract_source_content(
@@ -108,10 +104,14 @@ class ContentExtractor:
         # Check if we need to retry with deeper extraction
         word_count = content_data["word_count"]
 
-        if attempt < config.max_retry_attempts and word_count < config.min_word_count and not deep_extraction:
+        if (
+            attempt < self.config.research.max_retry_attempts
+            and word_count < self.config.research.min_word_count
+            and not deep_extraction
+        ):
             if self.verbose:
                 console.print(f"[yellow]🔄 Low word count ({word_count}), retrying with deep extraction...[/yellow]")
 
-            return await self.extract_with_retry(url=url, title=title, query=query, config=config, attempt=attempt + 1)
+            return await self.extract_with_retry(url=url, title=title, query=query, attempt=attempt + 1)
 
         return content_data

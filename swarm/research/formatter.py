@@ -8,19 +8,19 @@ from typing import Any
 from rich.console import Console
 from rich.panel import Panel
 
+from swarm.core.services import ServiceMixin
 from swarm.research.analyzer import AnalysisResult
 from swarm.research.language import LanguageHelper
 
 console = Console()
 
 
-class ResearchFormatter:
+class ResearchFormatter(ServiceMixin):
     """Handles formatting and display of research results."""
 
-    def __init__(self, config, query: str):
-        self.config = config
+    def __init__(self, query: str):
         self.query = query
-        self.language_helper = LanguageHelper(config.research.output_language)
+        self.language_helper = LanguageHelper(self.config.research.output_language)
 
     def display_results(
         self, analyses: list[AnalysisResult], final_summary: str, sources: list[dict[str, Any]], verbose: bool = False
@@ -308,16 +308,13 @@ class ResearchFormatter:
         return report
 
     def get_auto_filename(self) -> str:
-        """Generate automatic filename for research report."""
-        # Sanitize query for filename
+        """Generate automatic filename for research results."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        model_name = self.config.llm.model.replace(":", "_").replace(".", "_")
+        language_code = "en" if self.config.research.output_language == "english" else "zh"
+
+        # Clean query for filename
         safe_query = "".join(c for c in self.query if c.isalnum() or c in (" ", "-", "_")).rstrip()
         safe_query = safe_query.replace(" ", "_")[:50]  # Limit length
 
-        # Add timestamp and model info
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        model_name = self.config.llm.model.replace(":", "_").replace("/", "_")
-
-        # Add language suffix
-        lang_suffix = "_zh" if self.language_helper.is_chinese() else "_en"
-
-        return f"research_{safe_query}_{model_name}_{timestamp}{lang_suffix}.md"
+        return f"research_{safe_query}_{model_name}_{timestamp}_{language_code}.md"

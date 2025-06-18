@@ -7,16 +7,15 @@ from urllib.parse import urljoin
 
 from rich.console import Console
 
-from swarm.web.browser import Browser
+from swarm.core.services import ServiceMixin
 
 console = Console()
 
 
-class ImageProcessor:
+class ImageProcessor(ServiceMixin):
     """Handles image extraction and processing for research."""
 
-    def __init__(self, browser: Browser, verbose: bool = False):
-        self.browser = browser
+    def __init__(self, verbose: bool = False):
         self.verbose = verbose
 
     async def extract_images(self, url: str) -> list[dict[str, str]]:
@@ -30,19 +29,20 @@ class ImageProcessor:
             List of image data with markdown formatting
         """
         try:
-            # Get page info to extract images
-            page_info = await self.browser.get_current_page_info()
+            # Get page content to extract images - use the correct browser method
+            content_result = await self.browser.extract_page_content(max_length=50000)
 
-            if not page_info.get("success"):
+            if content_result.get("status") != "success":
                 return []
 
             images = []
 
             # Look for image elements in the page content
-            if "content" in page_info:
+            content = content_result.get("content", "")
+            if content:
                 # Find image URLs in the page content
                 img_pattern = r'<img[^>]*src=["\']([^"\']+)["\'][^>]*(?:alt=["\']([^"\']*)["\'])?[^>]*>'
-                matches = re.findall(img_pattern, page_info["content"], re.IGNORECASE)
+                matches = re.findall(img_pattern, content, re.IGNORECASE)
 
                 for match in matches:
                     img_url = match[0]
