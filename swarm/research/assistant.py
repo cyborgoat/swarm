@@ -177,14 +177,22 @@ class ResearchAssistant(ServiceMixin):
             if prepared_sources:
                 progress.update(task_id, completed=55, description="🧠 Analyzing content...")
 
-                analysis_results = await self.analyzer.analyze_sources(
-                    prepared_sources,
-                    research_data["query"],
-                    None,
-                    None,  # Don't pass progress to avoid nested progress bars
-                )
-
-                research_data["analysis_results"] = analysis_results
+                # Pause progress during streaming to avoid visual conflicts
+                if self.verbose and self.config.llm.enable_streaming:
+                    progress.stop()
+                
+                try:
+                    analysis_results = await self.analyzer.analyze_sources(
+                        prepared_sources,
+                        research_data["query"],
+                        None,
+                        None,  # Don't pass progress to avoid nested progress bars
+                    )
+                    research_data["analysis_results"] = analysis_results
+                finally:
+                    # Resume progress after streaming completes
+                    if self.verbose and self.config.llm.enable_streaming:
+                        progress.start()
 
                 # Display analysis summary
                 avg_relevance = (
@@ -216,11 +224,19 @@ class ResearchAssistant(ServiceMixin):
         try:
             progress.update(task_id, completed=80, description="🧠 Generating final summary...")
 
-            # Generate final summary using all analysis results
-            final_summary = await self.analyzer.generate_final_summary(
-                research_data["analysis_results"], research_data["query"]
-            )
-            research_data["final_summary"] = final_summary
+            # Pause progress during streaming to avoid visual conflicts
+            if self.verbose and self.config.llm.enable_streaming:
+                progress.stop()
+            
+            try:
+                final_summary = await self.analyzer.generate_final_summary(
+                    research_data["analysis_results"], research_data["query"]
+                )
+                research_data["final_summary"] = final_summary
+            finally:
+                # Resume progress after streaming completes
+                if self.verbose and self.config.llm.enable_streaming:
+                    progress.start()
 
             progress.update(task_id, completed=100, description="✅ Synthesis complete!")
 

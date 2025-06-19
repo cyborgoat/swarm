@@ -140,14 +140,37 @@ class ContentAnalyzer(ServiceMixin):
             )
 
         try:
-            # Get summary
-            summary_response = await self.llm.generate_async(prompt_template)
-            summary = summary_response.strip()
+            # Only use streaming when verbose mode is on to avoid progress bar conflicts
+            use_streaming = self.config.llm.enable_streaming and self.verbose
+            
+            if use_streaming:
+                # Get summary with streaming display
+                summary_title = f"📝 Analyzing: {title[:30]}..."
+                summary_response = await self.llm.generate_streaming(
+                    prompt_template, 
+                    console=console, 
+                    title=summary_title
+                )
+                summary = summary_response.strip()
 
-            # Get key finding
-            finding_prompt = self.language_helper.get_prompt("key_finding", query=query, title=title, content=content)
-            finding_response = await self.llm.generate_async(finding_prompt)
-            key_finding = finding_response.strip()
+                # Get key finding with streaming display
+                finding_prompt = self.language_helper.get_prompt("key_finding", query=query, title=title, content=content)
+                finding_title = f"🔍 Extracting Key Finding..."
+                finding_response = await self.llm.generate_streaming(
+                    finding_prompt, 
+                    console=console, 
+                    title=finding_title
+                )
+                key_finding = finding_response.strip()
+            else:
+                # Use regular async generation without streaming
+                summary_response = await self.llm.generate_async(prompt_template)
+                summary = summary_response.strip()
+
+                # Get key finding
+                finding_prompt = self.language_helper.get_prompt("key_finding", query=query, title=title, content=content)
+                finding_response = await self.llm.generate_async(finding_prompt)
+                key_finding = finding_response.strip()
 
             # Calculate relevance score (simple heuristic)
             relevance_score = await self._calculate_relevance_score(content, query, summary)
@@ -270,7 +293,18 @@ class ContentAnalyzer(ServiceMixin):
         )
 
         try:
-            summary = await self.llm.generate_async(prompt)
+            # Only use streaming when verbose mode is on to avoid progress bar conflicts
+            use_streaming = self.config.llm.enable_streaming and self.verbose
+            
+            if use_streaming:
+                summary = await self.llm.generate_streaming(
+                    prompt, 
+                    console=console, 
+                    title="📋 Generating Final Research Summary"
+                )
+            else:
+                summary = await self.llm.generate_async(prompt)
+                
             return summary.strip()
         except Exception as e:
             console.print(f"[red]Error generating final summary: {str(e)}[/red]")

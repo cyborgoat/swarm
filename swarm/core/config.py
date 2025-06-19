@@ -19,6 +19,8 @@ class LLMConfig(BaseModel):
     api_key: str | None = Field(default=None)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=8192, gt=0)
+    enable_streaming: bool = Field(default=True)
+    streaming_delay: float = Field(default=0.05, ge=0.0)
 
 
 class BrowserConfig(BaseModel):
@@ -84,6 +86,8 @@ class Config(BaseModel):
                 api_key=os.getenv("LLM_API_KEY"),
                 temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
                 max_tokens=int(os.getenv("LLM_MAX_TOKENS", "8192")),
+                enable_streaming=os.getenv("LLM_ENABLE_STREAMING", "true").lower() == "true",
+                streaming_delay=float(os.getenv("LLM_STREAMING_DELAY", "0.05")),
             ),
             browser=BrowserConfig(
                 headless=os.getenv("BROWSER_HEADLESS", "true").lower() == "true",
